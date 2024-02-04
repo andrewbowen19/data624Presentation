@@ -1,0 +1,83 @@
+---
+title: 'DATA 624 Presentation: Time Series Decomposition'
+author: "Andrew Bowen"
+date: "2024-02-04"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## R Markdown
+
+This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+
+## Slide with Bullets
+
+- Bullet 1
+- Bullet 2
+- Bullet 3
+
+```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tsibble)
+library(feasts)
+```
+
+
+## Our Dataset
+- We pulled [data representing Citibike rides in Jersey City during Q4 of 2023](https://s3.amazonaws.com/tripdata/index.html)
+
+```{r data-read-in, warning=FALSE, message=FALSE}
+# Read in our dataset and store it as a `tsibble` obejct
+df <- read_csv("data/rides_per_hour.csv")
+rides <- df %>% as_tsibble(index=start_time, key=c(start_station_name, rideable_type, member_casual))
+
+# Fill NAs with 0s
+rides <- fill_gaps(rides, number_of_rides=0)
+head(rides)
+```
+
+
+## Viewing our Data
+
+```{r plot-top-stations, echo=FALSE}
+# Select
+top_stations <- rides %>% group_by(start_station_name) %>% summarise(number_of_rides = sum(number_of_rides)) %>% filter(start_station_name == "Columbus Drive")
+
+
+autoplot(top_stations, number_of_rides)
+```
+
+
+## Plotting Seasonality
+We can "fold" our time series on a certain timescale to get a sense of what the seasonal fluctuations look like within a given "period"
+
+```{r}
+gg_season(top_stations, number_of_rides, period="day")
+```
+
+
+## Time Series Components
+
+- Our time-series data has two seasonal periods: daily and weekly
+- We can plot the different components of our decomposed series via the `autoplot` function
+
+```{r plot-components}
+# Plotting components of our TS
+decomp <- top_stations %>% 
+  model(stl = STL(number_of_rides))
+
+components(decomp) %>% autoplot()
+```
+
+## Moving Averages
+- Useful for "smoothing" data to reduce seasonal fluctuations
+
+
+## Decomposition Methods
+- Additive: $Y = S + T + C$
+- Multiplicative: $Y = S * T * C$
