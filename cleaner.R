@@ -1,17 +1,10 @@
 library(tidyverse)
 library(tsibble)
-
-dat <- read_csv("/Users/andrewbowen/Downloads/JC-202312-citibike-tripdata.csv")
-
-
-df <- dat %>% select(rideable_type, started_at, member_casual, start_station_name)
-
-rides_per_hour <- library(tidyverse)
-library(tsibble)
 library(lubridate)
 
-# Read in raw data
-dat <- read_csv("/Users/andrewbowen/Downloads/JC-202312-citibike-tripdata.csv")
+# Read in raw data: 
+# download link: https://s3.amazonaws.com/tripdata/JC-202312-citibike-tripdata.csv.zip
+dat <- read_csv("data/JC-202312-citibike-tripdata.csv")
 
 
 df <- dat %>% select(rideable_type, started_at, member_casual, start_station_name)
