@@ -157,8 +157,8 @@ casual_rides <-
   daily_total_rides |>
   filter(member_casual == "member") |>
   mutate(
-    `5-MA` = slider::slide_dbl(total_member_rides, mean,
-                .before = 2, .after = 2, .complete = TRUE)
+    `7-MA` = slider::slide_dbl(total_member_rides, mean,
+                .before = 3, .after = 3, .complete = TRUE)
   )
 
 head(casual_rides)
