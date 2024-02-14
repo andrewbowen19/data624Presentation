@@ -15,6 +15,7 @@ knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
 library(tsibble)
 library(feasts)
+library(arrow)
 ```
 
 
@@ -24,10 +25,12 @@ library(feasts)
 ```{r data-read-in, warning=FALSE, message=FALSE}
 # Read in our dataset and store it as a `tsibble` obejct
 df <- read_csv("data/rides_per_hour.csv")
+
+#df <- read_parquet("data/rides_per_hour.parquet")
 rides <- df %>% as_tsibble(index=start_time, key=c(start_station_name, rideable_type, member_casual))
 
 # Fill NAs with 0s
-rides <- fill_gaps(rides, number_of_rides=0)
+rides <- rides |> fill_gaps() |> mutate(number_of_rides = replace_na(number_of_rides, 0))
 head(rides)
 ```
 
@@ -88,16 +91,6 @@ seasonal_adjust %>%
 ```
 
 
-
-## Moving Averages
-- Useful for "smoothing" data to reduce seasonal fluctuations
-
-
-## Decomposition Methods
-- Additive: $Y = S + T + C$
-- Multiplicative: $Y = S * T * C$
-
-
 ## Viewing Daily Rides by Membership
 
 ```{r daily-rides, echo=FALSE}
@@ -112,7 +105,6 @@ head(daily_member_rides)
 Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
 
 ```{r plot-daily-rides, echo=FALSE, warning=FALSE}
-# Select
 daily_total_rides <-
   daily_member_rides %>%
   group_by(member_casual) %>% 
@@ -129,7 +121,8 @@ daily_total_rides |>
             hjust="left") + 
   theme(legend.position="none") +
   labs(title = "Daily Citi Bike Rides in Jersey City, NJ",
-       y = "Total Rides", x="")
+       y = "Total Rides", x="") +
+  scale_color_manual(values=c("#F28E2B", "#4E79A7"))
 ```
 
 ```{r table-daily-rides, echo=FALSE}
@@ -153,3 +146,35 @@ knitr::kable(merge_table,
              caption = "Membership Ridership", 
              col.names = c("Type", "Date", "Max Daily Rides", "Total Rides"))
 ```
+
+## Moving Averages
+- Useful for "smoothing" data to reduce seasonal fluctuations
+
+Let's look at member riders closer with moving averages. 
+
+```{r moving-averages}
+casual_rides <-
+  daily_total_rides |>
+  filter(member_casual == "member") |>
+  mutate(
+    `5-MA` = slider::slide_dbl(total_member_rides, mean,
+                .before = 2, .after = 2, .complete = TRUE)
+  )
+
+head(casual_rides)
+tail(casual_rides)
+```
+
+```{r plot-ma, warning=FALSE}
+casual_rides |>
+  autoplot(total_member_rides) +
+  geom_line(aes(y = `5-MA`), colour = "#D55E00") +
+  labs(y = "Total Rides",
+       title = "Riders with Membership")
+```
+
+
+
+## Decomposition Methods
+- Additive: $Y = S + T + C$
+- Multiplicative: $Y = S * T * C$
