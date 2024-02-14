@@ -1,21 +1,15 @@
 ---
 title: 'DATA 624 Presentation: Time Series Decomposition'
-author: "Andrew Bowen, John Cruz, Josh Forster"
+author: "Andrew Bowen"
 date: "2024-02-04"
-output: ioslides_presentation
+output: 
+  ioslides_presentation:
+    smaller: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
-
-## Slide with Bullets
-
-- Bullet 1
-- Bullet 2
-- Bullet 3
-
-## Required Libraries
 
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -25,63 +19,75 @@ library(feasts)
 
 
 ## Our Dataset
-- We pulled [data representing Citibike rides in Jersey City during Q4 of 2023](https://s3.amazonaws.com/tripdata/index.html). 
+- We pulled [data representing Citibike rides in Jersey City during Q4 of 2023](https://s3.amazonaws.com/tripdata/index.html)
 
 ```{r data-read-in, warning=FALSE, message=FALSE}
 # Read in our dataset and store it as a `tsibble` obejct
-df <- 
-  read_csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/rides_per_hour.csv")
-
-rides <- 
-  df %>% 
-  as_tsibble(index=start_time, 
-             key=c(start_station_name, rideable_type, member_casual))
+df <- read_csv("data/rides_per_hour.csv")
+rides <- df %>% as_tsibble(index=start_time, key=c(start_station_name, rideable_type, member_casual))
 
 # Fill NAs with 0s
-rides <- 
-  fill_gaps(rides, number_of_rides=0)
-
+rides <- fill_gaps(rides, number_of_rides=0)
 head(rides)
 ```
 
 
-## Viewing Hourly Rides Time Series
-
+## Viewing our Data
+It's always a good idea to plot your time series prior to any sort of decomposition
 ```{r plot-top-stations, echo=FALSE}
-# Select
-top_stations <- 
-  rides %>% 
+# Select out top station
+top_stations <- rides %>% 
   group_by(start_station_name) %>% 
   summarise(number_of_rides = sum(number_of_rides)) %>% 
   filter(start_station_name == "Columbus Drive")
 
-autoplot(top_stations, number_of_rides) +
-labs(y = 'Total Rides',
-     title = 'Hourly Citi Bike Rides in Jersey City, NJ')
+# Plot 
+autoplot(top_stations, number_of_rides) + 
+  labs(x="Start Time",
+       y="Number of Rides",
+       title="Columbus Drive (Jersey City) Citi Bike Rides: Fall 2024")
 ```
 
-## Plotting Seasonality
-We can "fold" our time series on a certain timescale to get a sense of what the seasonal fluctuations look like within a given "period"
 
+## Plotting Seasonality
+Below is the seasonal plot of our data for a daily period. We see a higher number of rides around 5-6pm, when many people are commuting.
 ```{r}
+# Seasonal plot of a daily period
 gg_season(top_stations, number_of_rides, period="day")
 ```
 
 
 ## Time Series Components
+- Our example time-series data has two seasonal periods: daily and weekly
+- We can plot the different `components` of our decomposed series via the `autoplot` function
 
-- Our time-series data has two seasonal periods: daily and weekly
-- We can plot the different components of our decomposed series via the `autoplot` function
-
-```{r plot-components}
-# Plotting components of our TS
-decomp <- 
-  top_stations %>% 
+```{r plot-components, echo=FALSE}
+# Plotting different components of our TS
+decomp <- top_stations %>% 
   model(stl = STL(number_of_rides))
 
-components(decomp) %>% 
-  autoplot()
+components(decomp) %>% autoplot() + 
+  labs(x="Start Time",
+       y="Number of Rides", 
+       title="Citibike Rides in Jersey City: Time-series Components")
 ```
+
+## Time Series Components
+
+- We can also seasonally-adjust our data easily in the `fabletools` package
+```{r seasonal-adjust, echo=FALSE}
+# Correct any negative values since number of rides has a min of 0
+seasonal_adjust <- components(decomp) %>% mutate(season_adjust = ifelse(season_adjust < 0, 0, season_adjust))
+
+seasonal_adjust %>%
+  as_tsibble() %>%
+  autoplot(number_of_rides, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "blue") +
+  labs(x="Start Time", y = "Rides",
+       title = "Seasonally-adjusted Number of Citibike Rides: Columbus Drive in Jersey City - Fall 2024")
+```
+
+
 
 ## Moving Averages
 - Useful for "smoothing" data to reduce seasonal fluctuations
@@ -90,69 +96,3 @@ components(decomp) %>%
 ## Decomposition Methods
 - Additive: $Y = S + T + C$
 - Multiplicative: $Y = S * T * C$
-
-
-## Viewing Daily Rides by Membership
-
-```{r daily-rides, echo=FALSE}
-
-daily_member_rides <- 
-  rides %>%
-  group_by_key() %>%
-  index_by(datetime = ~as_date(.)) %>%
-  summarise(total_rides = sum(number_of_rides))
-
-head(daily_member_rides)
-```
-
-Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
-
-```{r plot-daily-rides, echo=FALSE, warning=FALSE}
-# Select
-daily_total_rides <-
-  daily_member_rides %>%
-  group_by(member_casual) %>% 
-  summarise(total_member_rides = sum(total_rides))
-
-daily_total_rides |> 
-  ggplot(aes(x=datetime, y=total_member_rides, colour=member_casual, label=member_casual)) +
-  geom_line() +
-  geom_text(data = . %>% 
-               group_by(member_casual) %>%
-               filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
-               arrange(desc(total_member_rides)) %>%
-               head(2), 
-             aes(label = paste0(member_casual, " (", total_member_rides,")")),
-            hjust="left") + 
-  theme(legend.position="none") +
-  labs(title = "Daily Citi Bike Rides in Jersey City, NJ",
-       y = "Total Rides", x="")
-
-```
-
-```{r table-daily-rides, echo=FALSE}
-total_member_rides <-
-  daily_total_rides %>%
-  as_tibble() %>%
-  group_by(member_casual) %>%
-  summarise(total_member_rides = sum(total_member_rides, na.rm = TRUE)) %>%
-  arrange(desc(total_member_rides))
-
-member_rides <-
-  daily_total_rides %>%
-  group_by(member_casual) %>%
-  filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
-  arrange(desc(total_member_rides)) %>%
-  rename(max_station_rides = total_member_rides)
-
-merge_table <-
-  member_rides |>
-  left_join(total_member_rides, by=join_by(member_casual)) |>
-  arrange(desc(max_station_rides))
-
-knitr::kable(merge_table, 
-             caption = "Membership Ridership", 
-             col.names = c("Type", "Date", "Max Daily Rides", "Total Rides"))
-```
-
-
