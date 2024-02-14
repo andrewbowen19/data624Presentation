@@ -2,24 +2,14 @@
 title: 'DATA 624 Presentation: Time Series Decomposition'
 author: "Andrew Bowen"
 date: "2024-02-04"
-output: ioslides_presentation
+output: 
+  ioslides_presentation:
+    smaller: true
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 ```
-
-## R Markdown
-
-This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
-
-## Slide with Bullets
-
-- Bullet 1
-- Bullet 2
-- Bullet 3
 
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -43,36 +33,61 @@ head(rides)
 
 
 ## Viewing our Data
-
+It's always a good idea to plot your time series prior to any sort of decomposition
 ```{r plot-top-stations, echo=FALSE}
-# Select
-top_stations <- rides %>% group_by(start_station_name) %>% summarise(number_of_rides = sum(number_of_rides)) %>% filter(start_station_name == "Columbus Drive")
+# Select out top station
+top_stations <- rides %>% 
+  group_by(start_station_name) %>% 
+  summarise(number_of_rides = sum(number_of_rides)) %>% 
+  filter(start_station_name == "Columbus Drive")
 
-
-autoplot(top_stations, number_of_rides)
+# Plot 
+autoplot(top_stations, number_of_rides) + 
+  labs(x="Start Time",
+       y="Number of Rides",
+       title="Columbus Drive (Jersey City) Citi Bike Rides: Fall 2024")
 ```
 
 
 ## Plotting Seasonality
-We can "fold" our time series on a certain timescale to get a sense of what the seasonal fluctuations look like within a given "period"
-
+Below is the seasonal plot of our data for a daily period. We see a higher number of rides around 5-6pm, when many people are commuting.
 ```{r}
+# Seasonal plot of a daily period
 gg_season(top_stations, number_of_rides, period="day")
 ```
 
 
 ## Time Series Components
+- Our example time-series data has two seasonal periods: daily and weekly
+- We can plot the different `components` of our decomposed series via the `autoplot` function
 
-- Our time-series data has two seasonal periods: daily and weekly
-- We can plot the different components of our decomposed series via the `autoplot` function
-
-```{r plot-components}
-# Plotting components of our TS
+```{r plot-components, echo=FALSE}
+# Plotting different components of our TS
 decomp <- top_stations %>% 
   model(stl = STL(number_of_rides))
 
-components(decomp) %>% autoplot()
+components(decomp) %>% autoplot() + 
+  labs(x="Start Time",
+       y="Number of Rides", 
+       title="Citibike Rides in Jersey City: Time-series Components")
 ```
+
+## Time Series Components
+
+- We can also seasonally-adjust our data easily in the `fabletools` package
+```{r seasonal-adjust, echo=FALSE}
+# Correct any negative values since number of rides has a min of 0
+seasonal_adjust <- components(decomp) %>% mutate(season_adjust = ifelse(season_adjust < 0, 0, season_adjust))
+
+seasonal_adjust %>%
+  as_tsibble() %>%
+  autoplot(number_of_rides, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "blue") +
+  labs(x="Start Time", y = "Rides",
+       title = "Seasonally-adjusted Number of Citibike Rides: Columbus Drive in Jersey City - Fall 2024")
+```
+
+
 
 ## Moving Averages
 - Useful for "smoothing" data to reduce seasonal fluctuations
