@@ -1,6 +1,6 @@
 ---
 title: 'DATA 624 Presentation: Time Series Decomposition'
-author: "Andrew Bowen"
+author: "Andrew Bowen, John Cruz, Josh Forster"
 date: "2024-02-04"
 output: ioslides_presentation
 ---
@@ -9,17 +9,13 @@ output: ioslides_presentation
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-## R Markdown
-
-This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
-
 ## Slide with Bullets
 
 - Bullet 1
 - Bullet 2
 - Bullet 3
+
+## Required Libraries
 
 ```{r libraries, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -29,29 +25,40 @@ library(feasts)
 
 
 ## Our Dataset
-- We pulled [data representing Citibike rides in Jersey City during Q4 of 2023](https://s3.amazonaws.com/tripdata/index.html)
+- We pulled [data representing Citibike rides in Jersey City during Q4 of 2023](https://s3.amazonaws.com/tripdata/index.html). 
 
 ```{r data-read-in, warning=FALSE, message=FALSE}
 # Read in our dataset and store it as a `tsibble` obejct
-df <- read_csv("data/rides_per_hour.csv")
-rides <- df %>% as_tsibble(index=start_time, key=c(start_station_name, rideable_type, member_casual))
+df <- 
+  read_csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/rides_per_hour.csv")
+
+rides <- 
+  df %>% 
+  as_tsibble(index=start_time, 
+             key=c(start_station_name, rideable_type, member_casual))
 
 # Fill NAs with 0s
-rides <- fill_gaps(rides, number_of_rides=0)
+rides <- 
+  fill_gaps(rides, number_of_rides=0)
+
 head(rides)
 ```
 
 
-## Viewing our Data
+## Viewing Hourly Rides Time Series
 
 ```{r plot-top-stations, echo=FALSE}
 # Select
-top_stations <- rides %>% group_by(start_station_name) %>% summarise(number_of_rides = sum(number_of_rides)) %>% filter(start_station_name == "Columbus Drive")
+top_stations <- 
+  rides %>% 
+  group_by(start_station_name) %>% 
+  summarise(number_of_rides = sum(number_of_rides)) %>% 
+  filter(start_station_name == "Columbus Drive")
 
-
-autoplot(top_stations, number_of_rides)
+autoplot(top_stations, number_of_rides) +
+labs(y = 'Total Rides',
+     title = 'Hourly Citi Bike Rides in Jersey City, NJ')
 ```
-
 
 ## Plotting Seasonality
 We can "fold" our time series on a certain timescale to get a sense of what the seasonal fluctuations look like within a given "period"
@@ -68,10 +75,12 @@ gg_season(top_stations, number_of_rides, period="day")
 
 ```{r plot-components}
 # Plotting components of our TS
-decomp <- top_stations %>% 
+decomp <- 
+  top_stations %>% 
   model(stl = STL(number_of_rides))
 
-components(decomp) %>% autoplot()
+components(decomp) %>% 
+  autoplot()
 ```
 
 ## Moving Averages
@@ -81,3 +90,69 @@ components(decomp) %>% autoplot()
 ## Decomposition Methods
 - Additive: $Y = S + T + C$
 - Multiplicative: $Y = S * T * C$
+
+
+## Viewing Daily Rides by Membership
+
+```{r daily-rides, echo=FALSE}
+
+daily_member_rides <- 
+  rides %>%
+  group_by_key() %>%
+  index_by(datetime = ~as_date(.)) %>%
+  summarise(total_rides = sum(number_of_rides))
+
+head(daily_member_rides)
+```
+
+Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
+
+```{r plot-daily-rides, echo=FALSE, warning=FALSE}
+# Select
+daily_total_rides <-
+  daily_member_rides %>%
+  group_by(member_casual) %>% 
+  summarise(total_member_rides = sum(total_rides))
+
+daily_total_rides |> 
+  ggplot(aes(x=datetime, y=total_member_rides, colour=member_casual, label=member_casual)) +
+  geom_line() +
+  geom_text(data = . %>% 
+               group_by(member_casual) %>%
+               filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
+               arrange(desc(total_member_rides)) %>%
+               head(2), 
+             aes(label = paste0(member_casual, " (", total_member_rides,")")),
+            hjust="left") + 
+  theme(legend.position="none") +
+  labs(title = "Daily Citi Bike Rides in Jersey City, NJ",
+       y = "Total Rides", x="")
+
+```
+
+```{r table-daily-rides, echo=FALSE}
+total_member_rides <-
+  daily_total_rides %>%
+  as_tibble() %>%
+  group_by(member_casual) %>%
+  summarise(total_member_rides = sum(total_member_rides, na.rm = TRUE)) %>%
+  arrange(desc(total_member_rides))
+
+member_rides <-
+  daily_total_rides %>%
+  group_by(member_casual) %>%
+  filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
+  arrange(desc(total_member_rides)) %>%
+  rename(max_station_rides = total_member_rides)
+
+merge_table <-
+  member_rides |>
+  left_join(total_member_rides, by=join_by(member_casual)) |>
+  arrange(desc(max_station_rides))
+
+knitr::kable(merge_table, 
+             caption = "Membership Ridership", 
+             col.names = c("Type", "Date", "Max Daily Rides", "Total Rides"))
+```
+
+
