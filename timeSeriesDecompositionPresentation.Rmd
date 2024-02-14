@@ -96,3 +96,60 @@ seasonal_adjust %>%
 ## Decomposition Methods
 - Additive: $Y = S + T + C$
 - Multiplicative: $Y = S * T * C$
+
+
+## Viewing Daily Rides by Membership
+
+```{r daily-rides, echo=FALSE}
+daily_member_rides <- 
+  rides %>%
+  group_by_key() %>%
+  index_by(datetime = ~as_date(.)) %>%
+  summarise(total_rides = sum(number_of_rides))
+head(daily_member_rides)
+```
+
+Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
+
+```{r plot-daily-rides, echo=FALSE, warning=FALSE}
+# Select
+daily_total_rides <-
+  daily_member_rides %>%
+  group_by(member_casual) %>% 
+  summarise(total_member_rides = sum(total_rides))
+daily_total_rides |> 
+  ggplot(aes(x=datetime, y=total_member_rides, colour=member_casual, label=member_casual)) +
+  geom_line() +
+  geom_text(data = . %>% 
+               group_by(member_casual) %>%
+               filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
+               arrange(desc(total_member_rides)) %>%
+               head(2), 
+             aes(label = paste0(member_casual, " (", total_member_rides,")")),
+            hjust="left") + 
+  theme(legend.position="none") +
+  labs(title = "Daily Citi Bike Rides in Jersey City, NJ",
+       y = "Total Rides", x="")
+```
+
+```{r table-daily-rides, echo=FALSE}
+total_member_rides <-
+  daily_total_rides %>%
+  as_tibble() %>%
+  group_by(member_casual) %>%
+  summarise(total_member_rides = sum(total_member_rides, na.rm = TRUE)) %>%
+  arrange(desc(total_member_rides))
+member_rides <-
+  daily_total_rides %>%
+  group_by(member_casual) %>%
+  filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
+  arrange(desc(total_member_rides)) %>%
+  rename(max_station_rides = total_member_rides)
+merge_table <-
+  member_rides |>
+  left_join(total_member_rides, by=join_by(member_casual)) |>
+  arrange(desc(max_station_rides))
+knitr::kable(merge_table, 
+             caption = "Membership Ridership", 
+             col.names = c("Type", "Date", "Max Daily Rides", "Total Rides"))
+```
