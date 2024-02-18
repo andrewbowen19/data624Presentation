@@ -24,7 +24,7 @@ library(arrow)
 
 ```{r data-read-in, warning=FALSE, message=FALSE}
 # Read in our dataset and store it as a `tsibble` obejct
-df <- read_csv("data/rides_per_hour.csv")
+df <- read_parquet("data/rides_per_hour.parquet")
 
 #df <- read_parquet("data/rides_per_hour.parquet")
 rides <- df %>% as_tsibble(index=start_time, key=c(start_station_name, rideable_type, member_casual))
