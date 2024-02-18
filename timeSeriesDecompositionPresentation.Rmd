@@ -176,9 +176,7 @@ casual_rides |>
 
 
 ## Decomposition Methods
-- Additive: $Y = S + T + C$
-- Multiplicative: $Y = S * T * C$
-
+- Additive Decomposition: $Y = S + T + C$
 
 ```{r additive-decomp, warning=FALSE}
 # Additive decomposition first
@@ -191,7 +189,8 @@ casual_rides %>% model(
 ```
 
 
-
+## Decomposition
+- Multiplicative: $Y = S * T * C$
 
 ```{r multiplicative-decomp, warning=FALSE}
 # Additive decomposition first
@@ -204,8 +203,37 @@ casual_rides %>% model(
 ```
 
 
+## STL Decomposition
+- *Seasonal and Trend Decomposition using LOESS*
+- Use `trend` and `season` parameters to control how rapidly seasonality and trend change
+
+```{r stl-decomp, echo=FALSE, warning=FALSE}
+# Plot STL decomposition of our time series
+casual_rides |>
+  model(
+    STL(total_member_rides ~ trend(window = 31) +
+                   season(window = "periodic"),
+    robust = TRUE)) |>
+  components() |>
+  autoplot()
+```
+
+## Pros and Cons of STL Decomposition
+
+#### Pros
+- Can handle different types of seasonality well (not just  monthly/quarterly)
+- User has a lot of control over parameters (smoothness, windowing, etc)
+- Robust to outlier values
 
 
+#### Cons
+- Only can be used with additive decomposition
+- Doesn't handle calendar variation automatically
+  - [Here's an article with a newer method that handles multiple seasonalities well!](https://www.sciencedirect.com/science/article/abs/pii/S0096300322004726)
 
+## Sources Used
+
+- Hyndman, R.J., & Athanasopoulos, G. (2021) Forecasting: principles and practice, 3rd edition, OTexts: Melbourne, Australia. OTexts.com/fpp3. Accessed on February 16th, 2024
+- Oscar Trull, J. Carlos García-Díaz, A. Peiró-Signes, Multiple seasonal STL decomposition with discrete-interval moving seasonalities, Applied Mathematics and Computation, Volume 433, 2022, 127398, ISSN 0096-3003, [https://doi.org/10.1016/j.amc.2022.127398](https://www.sciencedirect.com/science/article/pii/S0096300322004726)
 
 
