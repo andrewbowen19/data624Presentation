@@ -24,7 +24,7 @@ library(arrow)
 
 ```{r data-read-in, warning=FALSE, message=FALSE}
 # Read in our dataset and store it as a `tsibble` obejct
-df <- read_csv("data/rides_per_hour.csv")
+df <- read_parquet("data/rides_per_hour.parquet")
 
 #df <- read_parquet("data/rides_per_hour.parquet")
 rides <- df %>% as_tsibble(index=start_time, key=c(start_station_name, rideable_type, member_casual))
@@ -168,7 +168,7 @@ tail(casual_rides)
 ```{r plot-ma, warning=FALSE}
 casual_rides |>
   autoplot(total_member_rides) +
-  geom_line(aes(y = `5-MA`), colour = "#D55E00") +
+  geom_line(aes(y = `7-MA`), colour = "#D55E00") +
   labs(y = "Total Rides",
        title = "Riders with Membership")
 ```
@@ -178,3 +178,34 @@ casual_rides |>
 ## Decomposition Methods
 - Additive: $Y = S + T + C$
 - Multiplicative: $Y = S * T * C$
+
+
+```{r additive-decomp, warning=FALSE}
+# Additive decomposition first
+casual_rides %>% model(
+    classical_decomposition(total_member_rides, type = "additive")
+  ) %>% 
+  components() %>% 
+  autoplot() +
+  labs(title = "Classical Additive Decomposition of Citibike Rides")
+```
+
+
+
+
+```{r multiplicative-decomp, warning=FALSE}
+# Additive decomposition first
+casual_rides %>% model(
+    classical_decomposition(total_member_rides, type = "multiplicative")
+  ) %>% 
+  components() %>% 
+  autoplot() +
+  labs(title = "Classical Multiplicative Decomposition of Citibike Rides")
+```
+
+
+
+
+
+
+
