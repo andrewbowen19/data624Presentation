@@ -1,6 +1,6 @@
 ---
 title: 'DATA 624 Presentation: Time Series Decomposition'
-author: "Andrew Bowen"
+author: "Andrew Bowen, Josh Forster, John Cruz"
 date: "2024-02-04"
 output: 
   ioslides_presentation:
@@ -17,7 +17,20 @@ library(tsibble)
 library(feasts)
 library(arrow)
 ```
+## What is a time series?
 
+- A time series is a group of observations of a data point that are tracked over time
+    - Trend/Cycle
+    - Seasonal
+    - Remainder
+- This information can be tracked at several levels of time (e.g. annual, quarterly, monthly, etc.)
+- Economic measures are generally the most common metrics tracked and discussed, but any area with relevant data points can be analyzed
+
+## Why is Time Series Decomposition relevant?
+
+- It is helpful to understand the patterns that make up trends/cycles vs seasonal behaviors.
+- Different modeling techniques can be applied based on the knowledge of how the primary components interact with one another.
+- If you are interested in making inferences on this data, it is a good starting point to get a better understanding of these elements
 
 ## Our Dataset
 - We pulled [data representing Citibike rides in Jersey City during Q4 of 2023](https://s3.amazonaws.com/tripdata/index.html)
@@ -101,8 +114,9 @@ daily_member_rides <-
   summarise(total_rides = sum(number_of_rides))
 head(daily_member_rides)
 ```
+## Follow Up
 
-Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
+-Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
 
 ```{r plot-daily-rides, echo=FALSE, warning=FALSE}
 daily_total_rides <-
@@ -231,9 +245,21 @@ casual_rides |>
 - Doesn't handle calendar variation automatically
   - [Here's an article with a newer method that handles multiple seasonalities well!](https://www.sciencedirect.com/science/article/abs/pii/S0096300322004726)
 
+#### Alternative Approaches
+
+- Since economists spend most of their time analyzing time series data, they have come up with additional methods
+    - X11/SEATS
+        - Primarily handles monthly and quarterly data, but allows for incorporation of holidays. 
+        - Variation of the seasonal period is allowed
+    - DSA
+        - German Bank established this method to handle daily data
+        - Combines STL on multiple seasonal components and ARIMA for additional handling of outliers and calendar adjustments
+
 ## Sources Used
 
 - Hyndman, R.J., & Athanasopoulos, G. (2021) Forecasting: principles and practice, 3rd edition, OTexts: Melbourne, Australia. OTexts.com/fpp3. Accessed on February 16th, 2024
 - Oscar Trull, J. Carlos García-Díaz, A. Peiró-Signes, Multiple seasonal STL decomposition with discrete-interval moving seasonalities, Applied Mathematics and Computation, Volume 433, 2022, 127398, ISSN 0096-3003, [https://doi.org/10.1016/j.amc.2022.127398](https://www.sciencedirect.com/science/article/pii/S0096300322004726)
+- https://cran.r-project.org/web/packages/dsa/dsa.pdf
+- https://towardsdatascience.com/seasonal-adjustment-of-daily-time-series-1bd2aa9b096d
 
 
