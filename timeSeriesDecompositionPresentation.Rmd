@@ -73,6 +73,21 @@ gg_season(top_stations, number_of_rides, period="day")
 ```
 
 
+## Lag Plots
+- Lag plots can be an effective way to display autocorrelation and seasonal cycles within your TS
+
+```{r lag-plots-monthly, echo=FALSE, warning=FALSE}
+gg_lag(top_stations, period=12, geom = c("point"))
+```
+## Lag Plots (cont.)
+
+```{r lag-plots-monthly, echo=FALSE, warning=FALSE}
+gg_lag(top_stations, period=7, geom = c("point"))
+```
+
+
+
+
 ## Time Series Components
 - Our example time-series data has two seasonal periods: daily and weekly
 - We can plot the different `components` of our decomposed series via the `autoplot` function
@@ -114,6 +129,8 @@ daily_member_rides <-
   summarise(total_rides = sum(number_of_rides))
 head(daily_member_rides)
 ```
+
+
 ## Follow Up
 
 -Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
