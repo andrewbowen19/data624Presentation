@@ -18,6 +18,9 @@ library(tsibble)
 library(feasts)
 library(kableExtra)
 library(arrow)
+library(dsa)
+library(xts)
+library(fracdiff)
 ```
 ## What is a time series?
 
@@ -136,7 +139,7 @@ head(daily_member_rides)
 
 
 
-## Follow Up
+## Membership Rides
 
 ```{r plot-daily-rides, echo=FALSE, warning=FALSE, fig.height=3}
 daily_total_rides <-
@@ -398,15 +401,101 @@ casual_rides |>
 - Doesn't handle calendar variation automatically
   - [Here's an article with a newer method that handles multiple seasonalities well!](https://www.sciencedirect.com/science/article/abs/pii/S0096300322004726)
 
-#### Alternative Approaches
+## Alternative Approaches
 
-- Since economists spend most of their time analyzing time series data, they have come up with additional methods
+- Since economists spend most of their time analyzing time series data, many researchers have come up with additional methods to decompose data
     - X11/SEATS
-        - Primarily handles monthly and quarterly data, but allows for incorporation of holidays. 
+        - Handles monthly and quarterly data, but allows for incorporation of holidays. 
         - Variation of the seasonal period is allowed
     - DSA
-        - German Bank established this method to handle daily data
+        - Established this method to handle daily data
         - Combines STL on multiple seasonal components and ARIMA for additional handling of outliers and calendar adjustments
+
+## DSA
+
+- Method created by an econometrics researcher to allow for seasonal adjustment of weekly and daily data
+- Designed to account for the different recurring patterns that exist on a weekly, monthly, and annual basis
+- STL and RegArima (both methods that are used with this approach) need to have consistent time periods
+
+## DSA: Algorithm Steps
+
+- Adjust Intra-Weekly Seasonality using STL.
+- Adjust the calendar (holidays) and outliers with RegArima.
+- Adjust Intra-Monthly Seasonality with STL.
+- Adjust Intra-Annual Seasonality with STL.
+
+```{r}
+currency_in_circulation <- zoo::na.locf(zoo::na.locf(daily_data$currency_circulation))
+
+reference_series <- currency_in_circulation
+restrict <- seq.Date(from=stats::start(reference_series), 
+                     to=stats::end(reference_series), by="days")
+restrict_forecast <- seq.Date(from=stats::end(reference_series)+1,
+                              length.out=365, by="days")
+
+AllHol <- merge(stats::lag(holidays$GoodFriday, -2), stats::lag(holidays$GoodFriday, -1), 
+                holidays[, c("GoodFriday")], stats::lag(holidays$GoodFriday, 1), 
+                holidays[, c("EasterSunday", "EasterMonday", "EasterMondayAft1Day")],
+                holidays$AscensionBef1Day, holidays$PentecostMonday) 
+colnames(AllHol) <- c("GoodFriday-2", "GoodFriday-1", "GoodFriday", 
+                      "GoodSaturday", "EasterSunday", "EasterMonday", 
+                      "EasterMondayAft1Day", "AscensionBef1Day", 
+                      "PentecostMonday")
+
+AllHolUse <- multi_xts2ts(AllHol[restrict])
+AllHolForecast <- multi_xts2ts(AllHol[restrict_forecast], short=TRUE)
+AllHolForecast <- AllHolForecast[,colSums(AllHolUse)!=0]
+AllHolUse <- AllHolUse[,colSums(AllHolUse)!=0]
+
+# Adjustment with DSA
+cic_sa <- dsa(currency_in_circulation, Log=FALSE, 
+              robust1=T, robust3=F, 
+              s.window1=53, s.window2=41, s.window3=21, 
+              cval=7.0, model_span=3,
+              fourier_number=24, 
+              regressor=AllHolUse, forecast_regressor = AllHolForecast,  
+              reiterate3=7, 
+              feb29="sa", 
+              progress_bar = FALSE)
+```
+
+
+## Currency Example from Docs
+
+```{r}
+g1 <- xtsplot(cic_sa$output[,c(2,1)]["2018/2020-05"], 
+              color=c("#9c9e9f", "darkred"), 
+              main="Original and Seasonally adjusted series", 
+              names=c("Original", "Adjusted")) + 
+  ggplot2::theme(legend.position = c(0.175, 0.775))
+g2 <- xtsplot(cic_sa$sfac_result[,1]["2018/2020-05"], 
+              color="#0062a1", 
+              main="Intra-weekly seasonal component", 
+              linesize=0.3) + 
+  ggplot2::theme(legend.position = "None")
+g3 <- xtsplot(cic_sa$sfac_result[,2]["2018/2020-05"], 
+              color="#0062a1", 
+              main="Moving holiday effect") + 
+  ggplot2::theme(legend.position = "None")
+g4 <- xtsplot(cic_sa$sfac_result[,3]["2018/2020-05"], 
+              color="#0062a1", 
+              main="Intra-monthly seasonal component") + 
+  ggplot2::theme(legend.position = "None")
+g5 <- xtsplot(cic_sa$sfac_result[,4]["2018/2020-05"], 
+              color="#0062a1", 
+              main="Intra-annual seasonal component") + 
+  ggplot2::theme(legend.position = "None")
+gridExtra::grid.arrange(g1, g2, g3, g4, g5, nrow=5)
+```
+
+## DSA Takeaways
+
+- This method allows for considerable parameter input in terms of relevant holidays and time windows for seasonality
+- It was not so simple to apply to the Citibike dataset off the shelf like an STL method
+- It is recommended to get better familiarity before using this decomposition technique
+
+## Questions?
+
 
 ## Sources Used
 
@@ -414,5 +503,7 @@ casual_rides |>
 - Oscar Trull, J. Carlos García-Díaz, A. Peiró-Signes, Multiple seasonal STL decomposition with discrete-interval moving seasonalities, Applied Mathematics and Computation, Volume 433, 2022, 127398, ISSN 0096-3003, [https://doi.org/10.1016/j.amc.2022.127398](https://www.sciencedirect.com/science/article/pii/S0096300322004726)
 - https://cran.r-project.org/web/packages/dsa/dsa.pdf
 - https://towardsdatascience.com/seasonal-adjustment-of-daily-time-series-1bd2aa9b096d
+- https://www.bundesbank.de/resource/blob/763892/f5cd282cc57e55aca1eb0d521d3aa0da/mL/2018-10-17-dkp-41-data.pdf
+
 
 
