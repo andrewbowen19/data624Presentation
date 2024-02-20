@@ -138,9 +138,6 @@ head(daily_member_rides)
 ```
 
 
-
-## Membership Rides
-
 ```{r plot-daily-rides, echo=FALSE, warning=FALSE, fig.height=3}
 daily_total_rides <-
   daily_member_rides %>%
@@ -195,7 +192,7 @@ kbl(merge_table,
 - Useful for "smoothing" data to reduce seasonal fluctuations and discover the trend-cycle. 
 
 $$
-T_t = \sum_{j=-k}^{k} y_{t+j}
+T_t = \sum_{j=-k}^{k} a_j y_{t+j} 
 $$
 
 $$k = \frac {(m-1)}{2}$$
@@ -335,8 +332,6 @@ even_casual_rides |>
   - Detrended Series = $y_t - T_t$
   - Seasonal Series = Average of the seasonal component (month, quarter, etc)
   - Remainder (Irregular) Series = $R_t = y_t - T_t - S_t$
-  
----
 
 ```{r additive-decomp, warning=FALSE}
 # Additive decomposition first
