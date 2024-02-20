@@ -199,7 +199,7 @@ $$k = \frac {(m-1)}{2}$$
 
 $$a_j = a_{-j}$$
 
-## Calculating for 01/04/2023
+## 7-MA: Riders without Membership
 
 $$7-MA = \sum_{j=-3}^{3} y_{t+j}$$
 
@@ -218,7 +218,7 @@ head(casual_rides, 7) |>
   row_spec(4, bold = T, color = "white", background = "#D7261E")
 ```
 
-## Calculating for 12/28/2023
+## 7-MA: Riders without Membership
 
 ```{r moving-averages-tail}
 tail(casual_rides, 7) |>
@@ -297,7 +297,7 @@ kbl(merge_table,
   kable_styling("condensed")
 ```
 
-## Calculating for 01/01/2023 12:00:00 PM
+## 2x24-MA: Riders without Membership
 
 ```{r moving-averages-head-even}
 even_casual_rides <-
@@ -326,8 +326,8 @@ even_casual_rides |>
        title = "2x24-MA: Riders without Membership")
 ```
 
-## Classical Decomposition Methods
-- Additive Decomposition: $Y = S + T + C$
+## Additive Decomposition
+  - $Y = S + T + C$
   - Calculate Trend-Cycle Component $T_t$ = 2 x m-MA (even) or m-MA (odd)
   - Detrended Series = $y_t - T_t$
   - Seasonal Series = Average of the seasonal component (month, quarter, etc)
@@ -343,9 +343,8 @@ casual_rides %>% model(
   labs(title = "Classical Additive Decomposition of Citibike Rides")
 ```
 
----
-
-- Multiplicative: $Y = S * T * C$
+## Multiplicative
+  - $Y = S * T * C$
   - Calculate Trend-Cycle Component $T_t$ = 2 x m-MA (even) or m-MA (odd)
   - Detrended Series = $\frac{y_t}{T_t}$
   - Seasonal Series = Average of the seasonal component (month, quarter, etc)
