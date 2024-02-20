@@ -1,5 +1,6 @@
 ---
-title: 'DATA 624 Presentation: Time Series Decomposition'
+title: 'Time Series Decomposition'
+subtitle: "DATA 624 Presentation"
 author: "Andrew Bowen, Josh Forster, John Cruz"
 date: "2024-02-04"
 output: 
@@ -15,6 +16,7 @@ knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
 library(tsibble)
 library(feasts)
+library(kableExtra)
 library(arrow)
 ```
 ## What is a time series?
@@ -77,12 +79,14 @@ gg_season(top_stations, number_of_rides, period="day")
 - Lag plots can be an effective way to display autocorrelation and seasonal cycles within your TS
 
 ```{r lag-plots-monthly, echo=FALSE, warning=FALSE}
-gg_lag(top_stations, period=12, geom = c("point"))
+top_stations %>% gg_lag(number_of_rides, period=12, geom = c("point"), lags=1:12)
 ```
-## Lag Plots (cont.)
 
-```{r lag-plots-monthly, echo=FALSE, warning=FALSE}
-gg_lag(top_stations, period=7, geom = c("point"))
+
+## Lag Plots (cont.)
+Below we see a plot of weekly lags. We don't see a ton of structure here indicating weaker relationships between a value and its lagged values
+```{r lag-plots-weekly, echo=FALSE, warning=FALSE}
+top_stations %>% gg_lag(number_of_rides, period=7, geom = c("point"), lag=1:7)
 ```
 
 
@@ -115,13 +119,13 @@ seasonal_adjust %>%
   autoplot(number_of_rides, colour = "gray") +
   geom_line(aes(y=season_adjust), colour = "blue") +
   labs(x="Start Time", y = "Rides",
-       title = "Seasonally-adjusted Number of Citibike Rides: Columbus Drive in Jersey City - Fall 2024")
+       title = "Seasonally-adjusted # of Citibike Rides: Columbus Drive in Jersey City - Fall 2024")
 ```
 
 
 ## Viewing Daily Rides by Membership
 
-```{r daily-rides, echo=FALSE}
+```{r daily-rides, echo=FALSE, results = FALSE}
 daily_member_rides <- 
   rides %>%
   group_by_key() %>%
@@ -131,11 +135,10 @@ head(daily_member_rides)
 ```
 
 
+
 ## Follow Up
 
--Interesting points where some days have higher casual ridership compared to member ridership. Holidays/Weekends?
-
-```{r plot-daily-rides, echo=FALSE, warning=FALSE}
+```{r plot-daily-rides, echo=FALSE, warning=FALSE, fig.height=3}
 daily_total_rides <-
   daily_member_rides %>%
   group_by(member_casual) %>% 
@@ -150,6 +153,7 @@ daily_total_rides |>
                head(2), 
              aes(label = paste0(member_casual, " (", total_member_rides,")")),
             hjust="left") + 
+  theme_bw() +
   theme(legend.position="none") +
   labs(title = "Daily Citi Bike Rides in Jersey City, NJ",
        y = "Total Rides", x="") +
@@ -163,51 +167,173 @@ total_member_rides <-
   group_by(member_casual) %>%
   summarise(total_member_rides = sum(total_member_rides, na.rm = TRUE)) %>%
   arrange(desc(total_member_rides))
+
 member_rides <-
   daily_total_rides %>%
   group_by(member_casual) %>%
   filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
   arrange(desc(total_member_rides)) %>%
   rename(max_station_rides = total_member_rides)
+
 merge_table <-
   member_rides |>
   left_join(total_member_rides, by=join_by(member_casual)) |>
   arrange(desc(max_station_rides))
-knitr::kable(merge_table, 
-             caption = "Membership Ridership", 
-             col.names = c("Type", "Date", "Max Daily Rides", "Total Rides"))
+
+kbl(merge_table, 
+    caption = "Membership Type", 
+    col.names = c("Type", "Date", "Max Daily Rides", "Total Rides")) |>
+  kable_styling("condensed")
 ```
 
+
 ## Moving Averages
-- Useful for "smoothing" data to reduce seasonal fluctuations
 
-Let's look at member riders closer with moving averages. 
+- Useful for "smoothing" data to reduce seasonal fluctuations and discover the trend-cycle. 
 
-```{r moving-averages}
+$$
+T_t = \sum_{j=-k}^{k} y_{t+j}
+$$
+
+$$k = \frac {(m-1)}{2}$$
+
+$$a_j = a_{-j}$$
+
+## Calculating for 01/04/2023
+
+$$7-MA = \sum_{j=-3}^{3} y_{t+j}$$
+
+```{r moving-averages-head}
 casual_rides <-
   daily_total_rides |>
-  filter(member_casual == "member") |>
+  filter(member_casual == "casual") |>
   mutate(
     `7-MA` = slider::slide_dbl(total_member_rides, mean,
                 .before = 3, .after = 3, .complete = TRUE)
   )
 
-head(casual_rides)
-tail(casual_rides)
+head(casual_rides, 7) |>
+  kbl() |>
+  kable_styling("condensed") |>
+  row_spec(4, bold = T, color = "white", background = "#D7261E")
 ```
+
+## Calculating for 12/28/2023
+
+```{r moving-averages-tail}
+tail(casual_rides, 7) |>
+  kbl() |>
+  kable_styling("condensed") |>
+  row_spec(4, bold = T, color = "white", background = "#D7261E")
+```
+
+---
 
 ```{r plot-ma, warning=FALSE}
 casual_rides |>
-  autoplot(total_member_rides) +
+  autoplot(total_member_rides, colour = "gray") +
   geom_line(aes(y = `7-MA`), colour = "#D55E00") +
   labs(y = "Total Rides",
-       title = "Riders with Membership")
+       title = "7-MA: Riders without Membership")
 ```
 
+## Moving Average is Even Ordered
 
+```{r hourly-rides, echo=FALSE, results = FALSE}
+hourly_member_rides <- 
+  rides %>%
+  group_by_key() %>%
+  index_by(datetime = ~round_date(., "hour")) %>%
+  summarise(total_rides = sum(number_of_rides))
+head(hourly_member_rides)
+```
 
-## Decomposition Methods
+```{r plot-hourly-rides, echo=FALSE, warning=FALSE, fig.height=3}
+hourly_total_rides <-
+  hourly_member_rides %>%
+  group_by(member_casual) %>% 
+  summarise(total_member_rides = sum(total_rides))
+
+hourly_total_rides |> 
+  ggplot(aes(x=datetime, y=total_member_rides, colour=member_casual, label=member_casual)) +
+  geom_line() +
+  geom_text(data = . %>% 
+               group_by(member_casual) %>%
+               filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
+               arrange(desc(total_member_rides)) %>%
+               head(2), 
+             aes(label = paste0(member_casual, " (", total_member_rides,")")),
+            hjust="left") + 
+  theme_bw() +
+  theme(legend.position="none") +
+  labs(title = "Hourly Citi Bike Rides in Jersey City, NJ",
+       y = "Total Rides", x="") +
+  scale_color_manual(values=c("#F28E2B", "#4E79A7"))
+```
+
+```{r table-qtr-rides, echo=FALSE}
+total_member_rides <-
+  hourly_total_rides %>%
+  as_tibble() %>%
+  group_by(member_casual) %>%
+  summarise(total_member_rides = sum(total_member_rides, na.rm = TRUE)) %>%
+  arrange(desc(total_member_rides))
+
+member_rides <-
+  hourly_total_rides %>%
+  group_by(member_casual) %>%
+  filter(total_member_rides == max(total_member_rides, na.rm = TRUE)) %>%
+  arrange(desc(total_member_rides)) %>%
+  rename(max_station_rides = total_member_rides)
+
+merge_table <-
+  member_rides |>
+  left_join(total_member_rides, by=join_by(member_casual)) |>
+  arrange(desc(max_station_rides))
+
+kbl(merge_table, 
+    caption = "Membership Type", 
+    col.names = c("Type", "Hour", "Max Daily Rides", "Total Rides")) |>
+  kable_styling("condensed")
+```
+
+## Calculating for 01/01/2023 12:00:00 PM
+
+```{r moving-averages-head-even}
+even_casual_rides <-
+  hourly_total_rides |>
+  filter(member_casual == "casual") |>
+  mutate(
+    `24-MA` = slider::slide_dbl(total_member_rides, mean,
+                .before = 11, .after = 12, .complete = TRUE),
+    `2x24-MA` = slider::slide_dbl(`24-MA`, mean,
+                .before = 1, .after = 0, .complete = TRUE)
+  )
+
+even_casual_rides[8:16, ] |>
+  kbl() |>
+  kable_styling("condensed") |>
+  row_spec(6, bold = T, color = "white", background = "#D7261E")
+```
+
+---
+
+```{r plot-ma-24, warning=FALSE}
+even_casual_rides |>
+  autoplot(total_member_rides, colour = "gray") +
+  geom_line(aes(y = `2x24-MA`), colour = "#D55E00") +
+  labs(y = "Total Rides",
+       title = "2x24-MA: Riders without Membership")
+```
+
+## Classical Decomposition Methods
 - Additive Decomposition: $Y = S + T + C$
+  - Calculate Trend-Cycle Component $T_t$ = 2 x m-MA (even) or m-MA (odd)
+  - Detrended Series = $y_t - T_t$
+  - Seasonal Series = Average of the seasonal component (month, quarter, etc)
+  - Remainder (Irregular) Series = $R_t = y_t - T_t - S_t$
+  
+---
 
 ```{r additive-decomp, warning=FALSE}
 # Additive decomposition first
@@ -219,12 +345,16 @@ casual_rides %>% model(
   labs(title = "Classical Additive Decomposition of Citibike Rides")
 ```
 
+---
 
-## Decomposition
 - Multiplicative: $Y = S * T * C$
+  - Calculate Trend-Cycle Component $T_t$ = 2 x m-MA (even) or m-MA (odd)
+  - Detrended Series = $\frac{y_t}{T_t}$
+  - Seasonal Series = Average of the seasonal component (month, quarter, etc)
+  - Remainder (Irregular) Series = $R_t = \frac{y_t}{T_t * S_t}$
 
 ```{r multiplicative-decomp, warning=FALSE}
-# Additive decomposition first
+# Multiplicative decomposition first
 casual_rides %>% model(
     classical_decomposition(total_member_rides, type = "multiplicative")
   ) %>% 
@@ -233,6 +363,12 @@ casual_rides %>% model(
   labs(title = "Classical Multiplicative Decomposition of Citibike Rides")
 ```
 
+## Classical Decomposition Drawbacks
+
+- The estimated trend-cycle is missing for the first and last few observations
+- The trend cycle can be smoothed too much with large, fast peaks and valleys
+- We assume the seasonality holds true between each year
+- It is not robust to valid outliers such as natural disasters or economic changes. 
 
 ## STL Decomposition
 - *Seasonal and Trend Decomposition using LOESS*
