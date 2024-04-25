@@ -376,7 +376,7 @@ casual_rides %>% model(
 casual_rides |>
   model(
     STL(total_member_rides ~ trend(window = 31) +
-                   season(window = "periodic"),
+                   season(window =  "periodic"),
     robust = TRUE)) |>
   components() |>
   autoplot()
