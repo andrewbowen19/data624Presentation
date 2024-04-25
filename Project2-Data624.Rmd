@@ -1,0 +1,87 @@
+---
+title: "DATA 624 Project 2"
+author: "Andrew Bowen, Josh Forster, John Cruz"
+date: "2024-04-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(caret)
+library(corrplot)
+library(mice)
+```
+
+
+## Exploratory Data Analysis
+
+First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub here](https://github.com/andrewbowen19/data624Presentation/tree/main/data)
+
+
+```{r}
+# Read in training and testing datasets
+train <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/train.csv")
+test <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/test.csv")
+```
+
+
+We can take a brief look at our training data summary.
+```{r}
+summary(train)
+```
+
+
+We can take a look at the distribution of our outcome variable (`PH`)
+```{r}
+# Plot pH level distribution: our output variable
+ggplot(train, aes(x=PH)) + geom_histogram()
+```
+
+
+### Data Wrangling
+
+
+```{r}
+# Convert Brand.Code to a factor as it's categorical
+train$Brand.Code <- as.factor(train$Brand.Code)
+```
+
+
+## Imputation
+Our dataset is missing values
+```{r message=FALSE, warning=FALSE}
+# Impute using the mice package
+imputed <- mice(train, meth="pmm")
+
+# Set the training set to be imputed values
+train <- imputed$imp
+```
+
+
+
+
+## Feature Selection
+
+Next, we'll look at
+
+```{r}
+
+correlations <- cor(as.matrix(train %>% dplyr::select(-c("Brand.Code"))))
+
+corrplot(correlations)
+```
+
+
+
+
+## Modeling
+
+
+### Multiple Linear Regression
+First, we'll fit a basic multiple linear regression model to our data
+
+## Model Evalutation
+
+
+
+
