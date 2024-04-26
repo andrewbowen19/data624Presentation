@@ -449,7 +449,8 @@ ggplot(training, aes(x=PH)) + geom_histogram()</code></pre>
 <div id="data-wrangling" class="section level3">
 <h3>Data Wrangling</h3>
 <pre class="r"><code># Convert Brand.Code to a factor as it&#39;s categorical
-training$Brand.Code &lt;- as.factor(training$Brand.Code)</code></pre>
+training$Brand.Code &lt;- as.factor(training$Brand.Code)
+test$Brand.Code &lt;- as.factor(test$Brand.Code)</code></pre>
 </div>
 </div>
 <div id="imputation" class="section level2">
@@ -522,8 +523,7 @@ corrplot(correlations)</code></pre>
 <h3>Multiple Linear Regression</h3>
 <p>First, we’ll fit a basic multiple linear regression model to our
 data</p>
-<pre class="r"><code># TODO(abowen): replace
-mlmModel &lt;- lm(PH ~ ., train)</code></pre>
+<pre class="r"><code>mlmModel &lt;- lm(PH ~ ., train)</code></pre>
 </div>
 <div id="random-forest" class="section level3">
 <h3>Random Forest</h3>
@@ -546,11 +546,24 @@ param &lt;-  data.frame(nrounds=c(100), max_depth = c(2),eta =c(0.3),gamma=c(0),
 
 xgBoostModel &lt;- train(PH~., data=train, method=&quot;xgbTree&quot;,
       trControl=trainControl(method=&quot;none&quot;), tuneGrid=param)</code></pre>
-<pre class="r"><code>xgBoostPred &lt;- predict(xgBoostModel, test)</code></pre>
 </div>
 </div>
 <div id="model-evalutation" class="section level2">
 <h2>Model Evalutation</h2>
+<p>We’ll need to impute our test data</p>
+<pre class="r"><code>testImputed &lt;- mice(test, method=&quot;pmm&quot;, seed=1234, printFlag = FALSE)</code></pre>
+<pre><code>## Warning: Number of logged events: 1</code></pre>
+<pre class="r"><code>test &lt;- complete(testImputed)</code></pre>
+<pre class="r"><code># Predict using all trained models
+predictionsLinear &lt;- predict(mlmModel, test)
+predictionsRandomForest &lt;- predict(rfModel, test)
+# predictionsNN &lt;- predict(nnetModel, test)
+predictionsXGBoost &lt;- predict(xgBoostModel, test)</code></pre>
+<p>Lastly, we’ll combine our prediction columns into</p>
+<pre class="r"><code>predictions &lt;- as.data.frame(cbind(linear = predictionsLinear,xgBoost = predictionsXGBoost, randomForest = predictionsRandomForest))#, neuralNet = predictionsNN)
+
+# Replace with local path if needed
+write_csv(predictions, &quot;/Users/andrewbowen/CUNY/data624Presentation/data/project2-predictions.csv&quot;)</code></pre>
 </div>
 
 

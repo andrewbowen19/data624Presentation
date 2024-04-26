@@ -45,6 +45,7 @@ ggplot(training, aes(x=PH)) + geom_histogram()
 ```{r wrangling}
 # Convert Brand.Code to a factor as it's categorical
 training$Brand.Code <- as.factor(training$Brand.Code)
+test$Brand.Code <- as.factor(test$Brand.Code)
 ```
 
 
@@ -82,12 +83,8 @@ corrplot(correlations)
 
 ### Multiple Linear Regression
 First, we'll fit a basic multiple linear regression model to our data
-
 ```{r}
-# TODO(abowen): replace
 mlmModel <- lm(PH ~ ., train)
-
-
 ```
 
 
@@ -119,13 +116,34 @@ xgBoostModel <- train(PH~., data=train, method="xgbTree",
 ```
 
 
-```{r}
-xgBoostPred <- predict(xgBoostModel, test)
-```
-
 
 ## Model Evalutation
 
 
+We'll need to impute our test data
+```{r impute-test-data}
+testImputed <- mice(test, method="pmm", seed=1234, printFlag = FALSE)
 
+test <- complete(testImputed)
+```
+
+
+
+```{r predict}
+# Predict using all trained models
+predictionsLinear <- predict(mlmModel, test)
+predictionsRandomForest <- predict(rfModel, test)
+# predictionsNN <- predict(nnetModel, test)
+predictionsXGBoost <- predict(xgBoostModel, test)
+```
+
+
+
+Lastly, we'll combine our prediction columns into 
+```{r combine-predictions}
+predictions <- as.data.frame(cbind(linear = predictionsLinear,xgBoost = predictionsXGBoost, randomForest = predictionsRandomForest))#, neuralNet = predictionsNN)
+
+# Replace with local path if needed
+write_csv(predictions, "/Users/andrewbowen/CUNY/data624Presentation/data/project2-predictions.csv")
+```
 
