@@ -10,6 +10,9 @@ library(tidyverse)
 library(caret)
 library(corrplot)
 library(mice)
+library(ModelMetrics)
+library(randomForest)
+library(nnet)
 ```
 
 
@@ -18,47 +21,47 @@ library(mice)
 First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub here](https://github.com/andrewbowen19/data624Presentation/tree/main/data)
 
 
-```{r}
+```{r read-in}
 # Read in training and testing datasets
-train <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/train.csv")
+training <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/train.csv")
 test <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/test.csv")
 ```
 
 
 We can take a brief look at our training data summary.
-```{r}
-summary(train)
+```{r train-summary}
+summary(training)
 ```
 
 
 We can take a look at the distribution of our outcome variable (`PH`)
-```{r}
+```{r plot-ph-dist}
 # Plot pH level distribution: our output variable
-ggplot(train, aes(x=PH)) + geom_histogram()
+ggplot(training, aes(x=PH)) + geom_histogram()
 ```
 
 
 ### Data Wrangling
-
-
-```{r}
+```{r wrangling}
 # Convert Brand.Code to a factor as it's categorical
-train$Brand.Code <- as.factor(train$Brand.Code)
+training$Brand.Code <- as.factor(training$Brand.Code)
 ```
 
 
 ## Imputation
-Our dataset is missing values
+Our dataset is missing values, so we'll have to imput using the `mice` library in R. For our purposes, we'll use [predictive mean matching as our imputation method](https://stefvanbuuren.name/fimd/sec-pmm.html), since we may or may not need to transform our target variable this is a good method as it's robust to transformations of our output variable $Y$.
 ```{r message=FALSE, warning=FALSE}
 # Impute using the mice package
-imputed <- mice(train, meth="pmm")
-
-# Set the training set to be imputed values
-train <- imputed$imp
+# TODO(abowen): fix imputation issue
+imputed <- mice(training, meth="pmm", seed=1234, printFlag = FALSE)
 ```
 
 
-
+```{r}
+# Set the training set to be imputed values
+train <- complete(imputed)
+head(train)
+```
 
 ## Feature Selection
 
@@ -79,6 +82,47 @@ corrplot(correlations)
 
 ### Multiple Linear Regression
 First, we'll fit a basic multiple linear regression model to our data
+
+```{r}
+# TODO(abowen): replace
+mlmModel <- lm(PH ~ ., train)
+
+
+```
+
+
+
+### Random Forest
+We'll train a random forest to predict the `PH` variable as well. Random forests are an ensemble method based on training several decision trees
+
+```{r}
+# Train random forest mdoel
+set.seed(12345)
+rfModel <- randomForest(PH ~ ., data = train)
+```
+
+
+### Neural Network
+
+
+
+### XGBoost
+One other poopular method is that of XGBoost
+
+```{r}
+# Set up parameter grid for XG Boost tuning
+param <-  data.frame(nrounds=c(100), max_depth = c(2),eta =c(0.3),gamma=c(0),
+                    colsample_bytree=c(0.8),min_child_weight=c(1),subsample=c(1)) 
+
+xgBoostModel <- train(PH~., data=train, method="xgbTree",
+      trControl=trainControl(method="none"), tuneGrid=param)
+```
+
+
+```{r}
+xgBoostPred <- predict(xgBoostModel, test)
+```
+
 
 ## Model Evalutation
 
