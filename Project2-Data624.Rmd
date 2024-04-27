@@ -41,6 +41,7 @@ ggplot(training, aes(x=PH)) + geom_histogram()
 ```
 
 
+
 ### Data Wrangling
 ```{r wrangling}
 # Convert Brand.Code to a factor as it's categorical
@@ -66,16 +67,15 @@ head(train)
 
 ## Feature Selection
 
-Next, we'll look at
+Next, we'll look at the correlations between our features and output PH
 
 ```{r}
-
 correlations <- cor(as.matrix(train %>% dplyr::select(-c("Brand.Code"))))
 
 corrplot(correlations)
 ```
 
-
+It's also helpful to see a pairwise distribution plot, which we can do via the `featurePlot` function from the `caret` library
 
 
 ## Modeling
@@ -100,7 +100,11 @@ rfModel <- randomForest(PH ~ ., data = train)
 
 
 ### Neural Network
-
+```{r}
+x <- train %>% select(-c(PH, Brand.Code))
+y <- train$PH
+nnModel <- nnet(x, y, size=16)
+```
 
 
 ### XGBoost
@@ -124,7 +128,7 @@ We'll need to impute our test data
 ```{r impute-test-data}
 testImputed <- mice(test, method="pmm", seed=1234, printFlag = FALSE)
 
-test <- complete(testImputed)
+test <- complete(testImputed) %>% select(-c(PH, Brand.Code))
 ```
 
 
@@ -133,7 +137,7 @@ test <- complete(testImputed)
 # Predict using all trained models
 predictionsLinear <- predict(mlmModel, test)
 predictionsRandomForest <- predict(rfModel, test)
-# predictionsNN <- predict(nnetModel, test)
+predictionsNN <- predict.nnet(nnModel, test)
 predictionsXGBoost <- predict(xgBoostModel, test)
 ```
 
