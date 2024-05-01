@@ -79,11 +79,19 @@ It's also helpful to see a pairwise distribution plot, which we can do via the `
 
 
 ## Modeling
+We'll train four different types of models for this regression task:
 
+- Multiple Linear Regression
+- Random Forest Regressor
+- XGBoost
+- Neural Net
+
+We'll predict on our test dataset (which we'll impute using the same method as the training dataset) using each of the models trained and write those to an output file for evaluation.
 
 ### Multiple Linear Regression
 First, we'll fit a basic multiple linear regression model to our data
 ```{r}
+# First, train a basic multiple linear regression model
 mlmModel <- lm(PH ~ ., train)
 ```
 
@@ -100,6 +108,7 @@ rfModel <- randomForest(PH ~ ., data = train)
 
 
 ### Neural Network
+We'll use the `nnet` package in R to train a neural net on our dataset.
 ```{r}
 x <- train %>% select(-c(PH, Brand.Code))
 y <- train$PH
@@ -108,15 +117,16 @@ nnModel <- nnet(x, y, size=16)
 
 
 ### XGBoost
-One other poopular method is that of XGBoost
+One other poopular method is that of XGBoost. This is a boosting method using gradient descent to minimize the loss function
 
 ```{r}
 # Set up parameter grid for XG Boost tuning
-param <-  data.frame(nrounds=c(100), max_depth = c(2),eta =c(0.3),gamma=c(0),
-                    colsample_bytree=c(0.8),min_child_weight=c(1),subsample=c(1)) 
+param <-  data.frame(nrounds=c(100), max_depth = c(2), eta=c(0.3), gamma=c(0),
+                     colsample_bytree=c(0.8), min_child_weight=c(1), subsample=c(1)) 
 
+# Train XGBoost using Repeated crossfold validation
 xgBoostModel <- train(PH~., data=train, method="xgbTree",
-      trControl=trainControl(method="none"), tuneGrid=param)
+                      trControl=trainControl(method="repeatedcv"), tuneGrid=param)
 ```
 
 
@@ -124,20 +134,20 @@ xgBoostModel <- train(PH~., data=train, method="xgbTree",
 ## Model Evalutation
 
 
-We'll need to impute our test data
+We'll need to impute our test data in order to not feed any `NaN` values into our models. We'll use the predictive mean matching method that we used above to impute our test values.
 ```{r impute-test-data}
 testImputed <- mice(test, method="pmm", seed=1234, printFlag = FALSE)
 
-test <- complete(testImputed) %>% select(-c(PH, Brand.Code))
+test <- complete(testImputed)# %>% select(-c("PH"))#, "Brand.Code"))
 ```
 
 
-
+Now we can use the four models we've trained 
 ```{r predict}
 # Predict using all trained models
 predictionsLinear <- predict(mlmModel, test)
 predictionsRandomForest <- predict(rfModel, test)
-predictionsNN <- predict.nnet(nnModel, test)
+predictionsNN <- predict(nnModel, test)
 predictionsXGBoost <- predict(xgBoostModel, test)
 ```
 
