@@ -13,6 +13,7 @@ library(mice)
 library(ModelMetrics)
 library(randomForest)
 library(nnet)
+library(MASS)
 library(naniar)
 library(car)
 library(elasticnet)
@@ -21,7 +22,7 @@ library(elasticnet)
 
 ## Exploratory Data Analysis
 
-First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub here](https://github.com/andrewbowen19/data624Presentation/tree/main/data)
+First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub here](https://github.com/andrewbowen19/data624Presentation/tree/main/data).
 
 
 ```{r read-in}
@@ -50,6 +51,7 @@ ggplot(training, aes(x=PH)) + geom_histogram()
 ```
 
 Most of the data is concentrated around a 8.5 pH level which are all bases above 7.0 and there is a slight left skew that exists in the data. There is one or a few very large outliers that exist on the right end of the data that probably need to be explored further as they may skew certain types of models.
+
 
 
 ### Data Wrangling
@@ -117,10 +119,9 @@ The second half of variables appear to be more skewed than the first half of pre
 
 ## Feature Selection
 
-Next, we'll look at
+Next, we'll look at the correlations between our features and output PH
 
 ```{r}
-
 correlations <- cor(as.matrix(train %>% dplyr::select(-c("Brand.Code"))))
 
 corrplot(correlations,diag=FALSE,type='lower')
@@ -132,7 +133,7 @@ From a preliminary view of the correlation matrix it appears that there are seve
 corrs_df <- as.data.frame(correlations) 
 corrs_df$base <- rownames(corrs_df)
 corrs_df |> pivot_longer(cols=colnames(corrs_df |> dplyr::select(-base))) |> 
-    mutate(mod_col=ifelse(base<name,paste(base,name,sep='|'),paste(name,base,sep='|'))) |> group_by(mod_col)|> mutate(rownum=row_number()) |> filter(base!= name & rownum==1) |> select(c(base,name,value)) |>
+    mutate(mod_col=ifelse(base<name,paste(base,name,sep='|'), paste(name,base,sep='|'))) |> group_by(mod_col)|> mutate(rownum=row_number()) |> filter(base!= name & rownum==1) |> dplyr::select(c(base,name,value)) |>
     arrange(-abs(value)) |> head(24)
 ```
 
@@ -142,12 +143,24 @@ There are two predictors with highly similar names `Balling` and `Balling.Lvl` t
 
 
 ## Modeling
+We'll train four different types of models for this regression task:
+
+- Multiple Linear Regression
+- Random Forest Regressor
+- XGBoost
+- Neural Net
+
+We'll predict on our test dataset (which we'll impute using the same method as the training dataset) using each of the models trained and write those to an output file for evaluation.
+
+### Multiple Linear Regression
+First, we'll fit a basic multiple linear regression model to our data. This can serve as a good "benchmark" model to compare our , as it's the simplest way to perform a regression task. We'll perform a [stepwise regression task](http://www.sthda.com/english/articles/37-model-selection-essentials-in-r/154-stepwise-regression-essentials-in-r/#) to do our feature selection in an automated way, since we have so many input variables and no clear domain expertise on which would contibute most to our model.
+
 A multiple linear regression will be used as a baseline model to see if a more simplistic and interpretable approach can be used to identify `pH`. Transformations for the predictor variable need to be considered in order to optimize the results of this model. A penalized version of the model will also be applied in order to determine  if unnecessary number of predictors are included when running stepwise regression.
 
 #### Transformation: Box-Cox
 
 ```{r}
-x_bc <- preProcess(train |> dplyr::select(-c(Brand.Code,X,PH)),method='BoxCox')
+x_bc <- preProcess(train |> dplyr::select(-c(Brand.Code,X,PH)), method='BoxCox')
 x_trans <- predict(x_bc,train |> dplyr::select(-c(Brand.Code,X,PH)))
 fh_x_trans <- x_trans[,1:16]
 sh_x_trans <- x_trans[,17:31]
@@ -184,7 +197,7 @@ train_trans <- as_tibble(cbind(train[,'PH'],x_trans)) |> rename(PH=`train[, "PH"
 ```{r}
 
 mlmModel <- lm(PH ~ ., train_trans |> dplyr::select(-c(Balling.Lvl,Density,MFR,Filler.Level,Hyd.Pressure3,Alch.Rel)))
-step_mlr <- step(mlmModel,direction='backward',trace=0)
+step_mlr <- step(mlmModel, direction='backward', trace=0)
 ```
 
 ```{r}
@@ -253,6 +266,7 @@ plot(train_lasso)
 ```
 
 
+
 ```{r}
 lasso_var_imp <- varImp(train_lasso,scale=FALSE)
 top_lasso_df <- head(lasso_var_imp$importance |> arrange(-Overall),25)
@@ -305,41 +319,71 @@ rfModel <- randomForest(PH ~ ., data = train)
 ```
 
 
-### Neural Network
+```{r}
+plot(rfModel)
+```
 
+### Neural Network
+We'll use the `nnet` package in R to train a neural net on our dataset.
+```{r w}
+myControl <- trainControl(## 3-fold CV
+    method = "cv",
+    number = 3)
+  
+nnGrid <-  expand.grid(size = seq(1, 10, 3),
+                         decay = c(0, 0.2, 0.4))
+
+# Train neural net model
+nnModel <- train(PH~ .,
+                   data = train,
+                   method = "nnet",
+                   maxit = 1000,
+                   tuneGrid = nnGrid,
+                   trainControl = myControl, trace = FALSE)
+```
+
+We'll plot our tuning loss as a function of our hyperparameter tuning
+```{r}
+plot(nnModel)
+```
 
 
 ### XGBoost
-One other poopular method is that of XGBoost
+One other poopular method is that of XGBoost. This is a boosting method using gradient descent to minimize the loss function
 
 ```{r}
 # Set up parameter grid for XG Boost tuning
-param <-  data.frame(nrounds=c(100), max_depth = c(2),eta =c(0.3),gamma=c(0),
-                    colsample_bytree=c(0.8),min_child_weight=c(1),subsample=c(1)) 
+param <-  data.frame(nrounds=c(100), max_depth = c(1:10), eta=c(0.3), gamma=seq(0, 0.9, 0.1),
+                     colsample_bytree=c(0.8), min_child_weight=c(1), subsample=c(1)) 
 
+# Train XGBoost using Repeated crossfold validation
 xgBoostModel <- train(PH~., data=train, method="xgbTree",
-      trControl=trainControl(method="none"), tuneGrid=param)
+                      trControl=trainControl(method="repeatedcv"), tuneGrid=param)
 ```
 
+Now we can plot our XGBoost model's hyperparameter tuning results
+```{r}
+plot(xgBoostModel)
+```
 
 
 ## Model Evalutation
 
 
-We'll need to impute our test data
+We'll need to impute our test data in order to not feed any `NaN` values into our models. We'll use the predictive mean matching method that we used above to impute our test values.
 ```{r impute-test-data}
 testImputed <- mice(test, method="pmm", seed=1234, printFlag = FALSE)
 
-test <- complete(testImputed)
+test <- complete(testImputed)# %>% select(-c("PH"))#, "Brand.Code"))
 ```
 
 
-
+Now we can use the four models we've trained 
 ```{r predict}
 # Predict using all trained models
 predictionsLinear <- predict(mlmModel, test)
 predictionsRandomForest <- predict(rfModel, test)
-# predictionsNN <- predict(nnetModel, test)
+predictionsNN <- predict(nnModel, test %>% dplyr::select(-c(PH)))
 predictionsXGBoost <- predict(xgBoostModel, test)
 ```
 
