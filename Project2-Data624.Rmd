@@ -13,12 +13,13 @@ library(mice)
 library(ModelMetrics)
 library(randomForest)
 library(nnet)
+library(MASS)
 ```
 
 
 ## Exploratory Data Analysis
 
-First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub here](https://github.com/andrewbowen19/data624Presentation/tree/main/data)
+First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub here](https://github.com/andrewbowen19/data624Presentation/tree/main/data).
 
 
 ```{r read-in}
@@ -75,7 +76,8 @@ correlations <- cor(as.matrix(train %>% dplyr::select(-c("Brand.Code"))))
 corrplot(correlations)
 ```
 
-It's also helpful to see a pairwise distribution plot, which we can do via the `featurePlot` function from the `caret` library
+We don't see a ton of strongly-correlated variables with our `PH` variable, so there's no strong candidates for a single feature to dominate the model. It's also helpful to see a pairwise distribution plot, which we can do via the `featurePlot` function from the `caret` library
+
 
 
 ## Modeling
@@ -89,12 +91,15 @@ We'll train four different types of models for this regression task:
 We'll predict on our test dataset (which we'll impute using the same method as the training dataset) using each of the models trained and write those to an output file for evaluation.
 
 ### Multiple Linear Regression
-First, we'll fit a basic multiple linear regression model to our data
-```{r}
-# First, train a basic multiple linear regression model
-mlmModel <- lm(PH ~ ., train)
-```
+First, we'll fit a basic multiple linear regression model to our data. This can serve as a good "benchmark" model to compare our , as it's the simplest way to perform a regression task.
+```{r linear-model}
+# Fit the model against all features
+full.model <- lm(PH ~., data = train)
 
+# Next train a stepwise regression model based on the original
+mlmModel <- stepAIC(full.model, direction = "both", trace = FALSE)
+summary(mlmModel)
+```
 
 
 ### Random Forest
@@ -107,12 +112,33 @@ rfModel <- randomForest(PH ~ ., data = train)
 ```
 
 
+```{r}
+
+plot(rfModel)
+```
+
 ### Neural Network
 We'll use the `nnet` package in R to train a neural net on our dataset.
+```{r w}
+myControl <- trainControl(## 3-fold CV
+    method = "cv",
+    number = 3)
+  
+nnGrid <-  expand.grid(size = seq(1, 10, 3),
+                         decay = c(0, 0.2, 0.4))
+
+# Train neural net model
+nnModel <- train(PH~ .,
+                   data = train,
+                   method = "nnet",
+                   maxit = 1000,
+                   tuneGrid = nnGrid,
+                   trainControl = myControl, trace = FALSE)
+```
+
+We'll plot our tuning loss as a function of our hyperparameter tuning
 ```{r}
-x <- train %>% select(-c(PH, Brand.Code))
-y <- train$PH
-nnModel <- nnet(x, y, size=16)
+plot(nnModel)
 ```
 
 
@@ -121,7 +147,7 @@ One other poopular method is that of XGBoost. This is a boosting method using gr
 
 ```{r}
 # Set up parameter grid for XG Boost tuning
-param <-  data.frame(nrounds=c(100), max_depth = c(2), eta=c(0.3), gamma=c(0),
+param <-  data.frame(nrounds=c(100), max_depth = c(1:10), eta=c(0.3), gamma=seq(0, 0.9, 0.1),
                      colsample_bytree=c(0.8), min_child_weight=c(1), subsample=c(1)) 
 
 # Train XGBoost using Repeated crossfold validation
@@ -129,6 +155,10 @@ xgBoostModel <- train(PH~., data=train, method="xgbTree",
                       trControl=trainControl(method="repeatedcv"), tuneGrid=param)
 ```
 
+Now we can plot our XGBoost model's hyperparameter tuning results
+```{r}
+plot(xgBoostModel)
+```
 
 
 ## Model Evalutation
@@ -147,7 +177,7 @@ Now we can use the four models we've trained
 # Predict using all trained models
 predictionsLinear <- predict(mlmModel, test)
 predictionsRandomForest <- predict(rfModel, test)
-predictionsNN <- predict(nnModel, test)
+predictionsNN <- predict(nnModel, test %>% dplyr::select(-c(PH)))
 predictionsXGBoost <- predict(xgBoostModel, test)
 ```
 
