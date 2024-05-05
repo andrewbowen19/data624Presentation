@@ -14,6 +14,9 @@ library(ModelMetrics)
 library(randomForest)
 library(nnet)
 library(MASS)
+library(naniar)
+library(car)
+library(elasticnet)
 ```
 
 
@@ -33,13 +36,21 @@ We can take a brief look at our training data summary.
 ```{r train-summary}
 summary(training)
 ```
+Most of the potential predictors are numeric aside from `Brand Code` and there are a good number of columns that have different numbers of null values that will need to be dealt with before getting to our models. Most of the variables have a few missing values, but MFR has around 212 which is far larger than any of the other values.
 
+```{r}
+dim(training)
+```
+
+There are only 2,571 records in the entire dataset which isn't that much to build a model off of, but using Cross Validation should hopefully allow for enough resampled cuts to be able to predict on unseen data. There are 32 potential predictors as it appears `X` is a row counter that can be ignored.
 
 We can take a look at the distribution of our outcome variable (`PH`)
 ```{r plot-ph-dist}
 # Plot pH level distribution: our output variable
 ggplot(training, aes(x=PH)) + geom_histogram()
 ```
+
+Most of the data is concentrated around a 8.5 pH level which are all bases above 7.0 and there is a slight left skew that exists in the data. There is one or a few very large outliers that exist on the right end of the data that probably need to be explored further as they may skew certain types of models.
 
 
 
@@ -50,6 +61,19 @@ training$Brand.Code <- as.factor(training$Brand.Code)
 test$Brand.Code <- as.factor(test$Brand.Code)
 ```
 
+```{r}
+ggplot(training, aes(x=Brand.Code)) + geom_bar() +
+    labs(title='Brand Code Frequencies')
+```
+
+There are a number of null values present for this factor variable. Does that correspond with other null cases in the remainder of the predictors?
+
+Let's look at the concentration of null values in the factor variable:
+```{r}
+naniar::gg_miss_fct(training,fct=Brand.Code) + labs(title='Missing Values by Brand Code')
+```
+
+Not that surprisingly the most common brand with missing values are the records with missing brand codes as well; however, the concentration isn't strong enough to considering excluding all related records where brand code is missing.
 
 ## Imputation
 Our dataset is missing values, so we'll have to imput using the `mice` library in R. For our purposes, we'll use [predictive mean matching as our imputation method](https://stefvanbuuren.name/fimd/sec-pmm.html), since we may or may not need to transform our target variable this is a good method as it's robust to transformations of our output variable $Y$.
@@ -66,6 +90,33 @@ train <- complete(imputed)
 head(train)
 ```
 
+```{r}
+hist_train <- train |> dplyr::select(-c(Brand.Code,X))
+dim(hist_train)
+```
+
+```{r}
+fh_train <- hist_train[,1:17]
+sh_train <- hist_train[,17:32]
+par(mfrow=c(4,4))
+par(mai=c(.3,.3,.3,.3))
+train_vars <- names(fh_train)
+for (i in 1:(length(train_vars)-1)) {
+    hist(fh_train[[train_vars[i]]], main = train_vars[i], col = "lightblue")
+}
+```
+
+The variables have been split into two groups to review their distributions and the first half of potential predictors is listed above. There are a few variables that appear to reasonably approximate a normal distribution (`Fill.Ounces`,`PC.Volume`,`Carb.Pressure`,`Carb.Temp`) and would likely not require any transformations. The variables with PSC in the name all are reasonably right skewed. There are a number of bimodal columns (Hyd.Pressure variants, `Mnf.Flow`). The remaining predictors are skewed in one direction.
+
+```{r}
+train_sh_vars <- names(sh_train)
+for (i in 1:(length(train_sh_vars))) {
+    hist(sh_train[[train_sh_vars[i]]], main = train_sh_vars[i], col = "lightblue")
+}
+```
+
+The second half of variables appear to be more skewed than the first half of predictors and will likely require transformation to be included in any regression model.
+
 ## Feature Selection
 
 Next, we'll look at the correlations between our features and output PH
@@ -73,10 +124,21 @@ Next, we'll look at the correlations between our features and output PH
 ```{r}
 correlations <- cor(as.matrix(train %>% dplyr::select(-c("Brand.Code"))))
 
-corrplot(correlations)
+corrplot(correlations,diag=FALSE,type='lower')
 ```
 
-We don't see a ton of strongly-correlated variables with our `PH` variable, so there's no strong candidates for a single feature to dominate the model. It's also helpful to see a pairwise distribution plot, which we can do via the `featurePlot` function from the `caret` library
+From a preliminary view of the correlation matrix it appears that there are several variables that are highly linearly correlated with one another.
+
+```{r}
+corrs_df <- as.data.frame(correlations) 
+corrs_df$base <- rownames(corrs_df)
+corrs_df |> pivot_longer(cols=colnames(corrs_df |> dplyr::select(-base))) |> 
+    mutate(mod_col=ifelse(base<name,paste(base,name,sep='|'), paste(name,base,sep='|'))) |> group_by(mod_col)|> mutate(rownum=row_number()) |> filter(base!= name & rownum==1) |> dplyr::select(c(base,name,value)) |>
+    arrange(-abs(value)) |> head(24)
+```
+
+There are two predictors with highly similar names `Balling` and `Balling.Lvl` that have an extremely high positive correlation and likely do not need to both be included in many types of models. `Balling` and `Density` also have a substantial correlation with one another, which is also very similar to `Balling.Lvl` as expected given the correlation discussed above. Interestingly `MFR` has a substantial correlation with `Filler.Speed` of 0.95 and despite imputing the most number of values was not completely necessary.
+
 
 
 
@@ -92,15 +154,160 @@ We'll predict on our test dataset (which we'll impute using the same method as t
 
 ### Multiple Linear Regression
 First, we'll fit a basic multiple linear regression model to our data. This can serve as a good "benchmark" model to compare our , as it's the simplest way to perform a regression task. We'll perform a [stepwise regression task](http://www.sthda.com/english/articles/37-model-selection-essentials-in-r/154-stepwise-regression-essentials-in-r/#) to do our feature selection in an automated way, since we have so many input variables and no clear domain expertise on which would contibute most to our model.
-```{r linear-model}
-# Fit the model against all features
-full.model <- lm(PH ~., data = train)
 
-# Next train a stepwise regression model based on the original
-mlmModel <- stepAIC(full.model, direction = "both", trace = FALSE)
+A multiple linear regression will be used as a baseline model to see if a more simplistic and interpretable approach can be used to identify `pH`. Transformations for the predictor variable need to be considered in order to optimize the results of this model. A penalized version of the model will also be applied in order to determine  if unnecessary number of predictors are included when running stepwise regression.
+
+#### Transformation: Box-Cox
+
+```{r}
+x_bc <- preProcess(train |> dplyr::select(-c(Brand.Code,X,PH)), method='BoxCox')
+x_trans <- predict(x_bc,train |> dplyr::select(-c(Brand.Code,X,PH)))
+fh_x_trans <- x_trans[,1:16]
+sh_x_trans <- x_trans[,17:31]
+
+par(mfrow=c(4,4))
+par(mai=c(.3,.3,.3,.3))
+for (i in 1:(length(colnames(fh_x_trans)))) {
+    print(colnames(fh_x_trans)[i])
+    hist(fh_x_trans[[colnames(fh_x_trans)[i]]], main = colnames(fh_x_trans)[i], col = "lightblue")
+}
+```
+
+The Box-Cox transformation does not appear to have improved the `Hyd.Pressure` variables much as they mostly remain bimodally shaped although the 4th variable of this type does appear to be somewhat bell shaped. The non-normalized variables will not be excluded from the model unless they further violate key assumptions when running linear regression
+
+```{r}
+par(mfrow=c(4,4))
+par(mai=c(.3,.3,.3,.3))
+for (i in 1:(length(colnames(sh_x_trans)))) {
+    print(colnames(sh_x_trans)[i])
+    hist(sh_x_trans[[colnames(sh_x_trans)[i]]], main = colnames(sh_x_trans)[i], col = "lightblue")
+}
+```
+
+The second half of predictors were more sparse in nature partially due to being discrete variables and for the most part didn't substantially normalize after applying Box-Cox transformation.
+
+Given that there are several highly correlated predictors, a few of them will be filtered at the beginning to prevent issues that arise from multicollinearity.
+
+First, we'll fit a basic multiple linear regression model to our data
+
+```{r}
+train_trans <- as_tibble(cbind(train[,'PH'],x_trans)) |> rename(PH=`train[, "PH"]`)
+```
+
+```{r}
+
+mlmModel <- lm(PH ~ ., train_trans |> dplyr::select(-c(Balling.Lvl,Density,MFR,Filler.Level,Hyd.Pressure3,Alch.Rel)))
+step_mlr <- step(mlmModel, direction='backward', trace=0)
+```
+
+```{r}
 summary(mlmModel)
 ```
 
+The model based on the f-statistic is statistically significant from an intercept only model, but there are a number of insignificant predictors present when considering all of the remaining input variables.
+
+Is there still multicollinearity?
+
+```{r}
+vif(mlmModel)
+```
+
+Yes, there is substantial variance inflation factor scores in `Carb.Volume`, `Carb.Pressure`, and `Carb.Temp` that would need to be dealt with which would nullify the validity of this model. Therefore, no other assumptions in the residuals will be evaluated.
+
+Will stepwise regression eliminate linearly related predictors from the full model?
+
+```{r}
+
+summary(step_mlr)
+```
+
+Not all of the remaining predictors appear to be statistically significant although this model should have a lower AIC score compared to other model variants reviewed with backward testing. Overall, it only looks to predict approximately 33% of the variability in `PH` which does not seem to be very accurate although it'll depend on the performance of the remaining models.
+
+Is multicollinearity addressed as compared to the full model?
+
+```{r}
+vif(step_mlr)
+```
+
+Yes, while `Mnf.Flow` is over 4 all of the predictors have a score under 5.
+
+Do the residuals follow the key assumptions?
+
+```{r}
+par(mfrow=c(2,2))
+par(mai=c(.3,.3,.3,.3))
+plot(step_mlr)
+```
+
+The fitted/scaled residuals appear to show a cloud shape across the x range that does not indicate other relationships/patterns exist to violate assumptions. Point 1094 may be a high leverage point based on it's Cook's Distance value and it also stands out from the remaining points in both fitted residual diagnostic plots and the Q-Q graphic. There is some leftward skew shows in the Q-Q plot but it is not clear if the distribution of the residuals diverges enough from an approximately normal distribution to violate this assumption.
+
+Given the fact that the standard linear regression has an $R^2$ of ~33% let's see if a penalized version can improve the results in a training set:
+```{r}
+class(train$PH)
+```
+
+```{r}
+set.seed(21)
+x_Train <- as.matrix(as.data.frame(train |> dplyr::select(-c(PH,X,Brand.Code))))
+y_Train <- train$PH
+train_lasso <- train(x=x_Train, y=y_Train,
+                 method='lasso',
+                  tuneGrid=data.frame(.fraction = seq(0, 0.5, by=0.01)),
+                  trControl=trainControl(method='cv'),
+                  preProcess=c('center','scale'))
+```
+
+```{r}
+train_lasso
+```
+
+```{r}
+plot(train_lasso)
+```
+
+
+
+```{r}
+lasso_var_imp <- varImp(train_lasso,scale=FALSE)
+top_lasso_df <- head(lasso_var_imp$importance |> arrange(-Overall),25)
+
+ggplot(data=top_lasso_df,aes(x=Overall,y=reorder(rownames(top_lasso_df),Overall))) +
+    geom_bar(stat='identity') +
+    labs(title='Most important variables in Lasso Regression',y='Predictors')
+```
+
+The lasso regression model identified the `Mnf.Flow` as the most significant predictor in the model which is somewhat separated from the next most influential variables which appear to be closely aligned in a second tier. The model itself did not appear to substantially outperform standard linear regression based on the $R^2$ statistic.
+
+
+```{r}
+set.seed(6)
+tr_ctrl <- trainControl(method = "cv", number = 10)
+# Grid search for optimized penalty lambdas
+enet_gs <- expand.grid(.lambda = c(0, 0.01, .1), .fraction = seq(.05, 1, length = 20))
+
+# tuning penalized regression model
+enet_fit <- train(x_Train, y_Train, method = "enet",
+                  tuneGrid = enet_gs, trControl = tr_ctrl, preProc = c("center", "scale"))
+```
+
+```{r}
+enet_fit
+```
+
+```{r}
+plot(enet_fit)
+```
+
+```{r}
+enet_var_imp <- varImp(enet_fit,scale=FALSE)
+top_enet_df <- head(enet_var_imp$importance |> arrange(-Overall),25)
+
+ggplot(data=top_enet_df,aes(x=Overall,y=reorder(rownames(top_enet_df),Overall))) +
+    geom_bar(stat='identity') +
+    labs(title='Most important variables in ElasticNet Regression',y='Predictors')
+```
+
+The elastic net optimized model based on parameters (Lambda=0, fraction=0.9) has similar top predictors to the lasso model run on the dataset. The $R^2$ is ~34% which isn't much higher than the lasso or OLS linear regression model. In subsequent sections, additional models are explored that will try to better estimate the pH levels in this manufacturing process.
 
 ### Random Forest
 We'll train a random forest to predict the `PH` variable as well. Random forests are an ensemble method based on training several decision trees
@@ -113,7 +320,6 @@ rfModel <- randomForest(PH ~ ., data = train)
 
 
 ```{r}
-
 plot(rfModel)
 ```
 

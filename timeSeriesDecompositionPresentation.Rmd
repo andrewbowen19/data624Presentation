@@ -333,6 +333,8 @@ even_casual_rides |>
   - Seasonal Series = Average of the seasonal component (month, quarter, etc)
   - Remainder (Irregular) Series = $R_t = y_t - T_t - S_t$
 
+---
+
 ```{r additive-decomp, warning=FALSE}
 # Additive decomposition first
 casual_rides %>% model(
@@ -343,12 +345,14 @@ casual_rides %>% model(
   labs(title = "Classical Additive Decomposition of Citibike Rides")
 ```
 
-## Multiplicative
+## Multiplicative Decomposition
   - $Y = S * T * C$
   - Calculate Trend-Cycle Component $T_t$ = 2 x m-MA (even) or m-MA (odd)
   - Detrended Series = $\frac{y_t}{T_t}$
   - Seasonal Series = Average of the seasonal component (month, quarter, etc)
   - Remainder (Irregular) Series = $R_t = \frac{y_t}{T_t * S_t}$
+  
+---
 
 ```{r multiplicative-decomp, warning=FALSE}
 # Multiplicative decomposition first
