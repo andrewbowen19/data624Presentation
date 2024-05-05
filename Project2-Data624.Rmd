@@ -91,7 +91,7 @@ We'll train four different types of models for this regression task:
 We'll predict on our test dataset (which we'll impute using the same method as the training dataset) using each of the models trained and write those to an output file for evaluation.
 
 ### Multiple Linear Regression
-First, we'll fit a basic multiple linear regression model to our data. This can serve as a good "benchmark" model to compare our , as it's the simplest way to perform a regression task.
+First, we'll fit a basic multiple linear regression model to our data. This can serve as a good "benchmark" model to compare our , as it's the simplest way to perform a regression task. We'll perform a [stepwise regression task](http://www.sthda.com/english/articles/37-model-selection-essentials-in-r/154-stepwise-regression-essentials-in-r/#) to do our feature selection in an automated way, since we have so many input variables and no clear domain expertise on which would contibute most to our model.
 ```{r linear-model}
 # Fit the model against all features
 full.model <- lm(PH ~., data = train)
