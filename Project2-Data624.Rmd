@@ -76,7 +76,7 @@ naniar::gg_miss_fct(training,fct=Brand.Code) + labs(title='Missing Values by Bra
 Not that surprisingly the most common brand with missing values are the records with missing brand codes as well; however, the concentration isn't strong enough to considering excluding all related records where brand code is missing.
 
 ## Imputation
-Our dataset is missing values, so we'll have to imput using the `mice` library in R. For our purposes, we'll use [predictive mean matching as our imputation method](https://stefvanbuuren.name/fimd/sec-pmm.html), since we may or may not need to transform our target variable this is a good method as it's robust to transformations of our output variable $Y$.
+Our dataset is missing values, so we'll have to impute using the `mice` library in R. For our purposes, we'll use [predictive mean matching as our imputation method](https://stefvanbuuren.name/fimd/sec-pmm.html), since we may or may not need to transform our target variable this is a good method as it's robust to transformations of our output variable $Y$.
 ```{r message=FALSE, warning=FALSE}
 # Impute using the mice package
 # TODO(abowen): fix imputation issue
@@ -109,6 +109,8 @@ for (i in 1:(length(train_vars)-1)) {
 The variables have been split into two groups to review their distributions and the first half of potential predictors is listed above. There are a few variables that appear to reasonably approximate a normal distribution (`Fill.Ounces`,`PC.Volume`,`Carb.Pressure`,`Carb.Temp`) and would likely not require any transformations. The variables with PSC in the name all are reasonably right skewed. There are a number of bimodal columns (Hyd.Pressure variants, `Mnf.Flow`). The remaining predictors are skewed in one direction.
 
 ```{r}
+par(mfrow=c(4,4))
+par(mai=c(.3,.3,.3,.3))
 train_sh_vars <- names(sh_train)
 for (i in 1:(length(train_sh_vars))) {
     hist(sh_train[[train_sh_vars[i]]], main = train_sh_vars[i], col = "lightblue")
@@ -138,8 +140,6 @@ corrs_df |> pivot_longer(cols=colnames(corrs_df |> dplyr::select(-base))) |>
 ```
 
 There are two predictors with highly similar names `Balling` and `Balling.Lvl` that have an extremely high positive correlation and likely do not need to both be included in many types of models. `Balling` and `Density` also have a substantial correlation with one another, which is also very similar to `Balling.Lvl` as expected given the correlation discussed above. Interestingly `MFR` has a substantial correlation with `Filler.Speed` of 0.95 and despite imputing the most number of values was not completely necessary.
-
-
 
 
 ## Modeling
@@ -246,7 +246,7 @@ Given the fact that the standard linear regression has an $R^2$ of ~33% let's se
 class(train$PH)
 ```
 
-```{r}
+```{r, warning=FALSE}
 set.seed(21)
 x_Train <- as.matrix(as.data.frame(train |> dplyr::select(-c(PH,X,Brand.Code))))
 y_Train <- train$PH
@@ -318,6 +318,12 @@ set.seed(12345)
 rfModel <- randomForest(PH ~ ., data = train)
 ```
 
+```{r}
+rfModel
+
+importance(rfModel)
+```
+
 
 ```{r}
 plot(rfModel)
@@ -325,7 +331,7 @@ plot(rfModel)
 
 ### Neural Network
 We'll use the `nnet` package in R to train a neural net on our dataset.
-```{r w}
+```{r warning=FALSE}
 myControl <- trainControl(## 3-fold CV
     method = "cv",
     number = 3)
@@ -369,7 +375,6 @@ plot(xgBoostModel)
 
 ## Model Evalutation
 
-
 We'll need to impute our test data in order to not feed any `NaN` values into our models. We'll use the predictive mean matching method that we used above to impute our test values.
 ```{r impute-test-data}
 testImputed <- mice(test, method="pmm", seed=1234, printFlag = FALSE)
@@ -394,6 +399,6 @@ Lastly, we'll combine our prediction columns into
 predictions <- as.data.frame(cbind(linear = predictionsLinear,xgBoost = predictionsXGBoost, randomForest = predictionsRandomForest))#, neuralNet = predictionsNN)
 
 # Replace with local path if needed
-write_csv(predictions, "/Users/andrewbowen/CUNY/data624Presentation/data/project2-predictions.csv")
+# write_csv(predictions, "/Users/andrewbowen/CUNY/data624Presentation/data/project2-predictions.csv")
 ```
 
