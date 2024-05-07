@@ -19,10 +19,13 @@ library(car)
 library(elasticnet)
 ```
 
+## Introduction
+
+New regulations are requiring ABC Beverage to understand its manufacturing process better. We will look into the predictive factors that may influence pH in this process. 
 
 ## Exploratory Data Analysis
 
-First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub here](https://github.com/andrewbowen19/data624Presentation/tree/main/data).
+First, we'll read in our training and testing datasets. We've converted them via a basic R script and they are available on our [GitHub](https://github.com/andrewbowen19/data624Presentation/tree/main/data).
 
 
 ```{r read-in}
@@ -44,8 +47,21 @@ dim(training)
 
 There are only 2,571 records in the entire dataset which isn't that much to build a model off of, but using Cross Validation should hopefully allow for enough resampled cuts to be able to predict on unseen data. There are 32 potential predictors as it appears `X` is a row counter that can be ignored.
 
+```{r drop-x-xol}
+training <-
+  training |>
+  dplyr::select(-X) |>
+  relocate(PH)
+
+test <-
+  test |>
+  dplyr::select(-X) |>
+  relocate(PH)
+```
+
+
 We can take a look at the distribution of our outcome variable (`PH`)
-```{r plot-ph-dist}
+```{r plot-ph-dist, warning=FALSE, message=FALSE}
 # Plot pH level distribution: our output variable
 ggplot(training, aes(x=PH)) + geom_histogram()
 ```
@@ -91,7 +107,7 @@ head(train)
 ```
 
 ```{r}
-hist_train <- train |> dplyr::select(-c(Brand.Code,X))
+hist_train <- train |> dplyr::select(-c(Brand.Code))
 dim(hist_train)
 ```
 
@@ -160,8 +176,8 @@ A multiple linear regression will be used as a baseline model to see if a more s
 #### Transformation: Box-Cox
 
 ```{r}
-x_bc <- preProcess(train |> dplyr::select(-c(Brand.Code,X,PH)), method='BoxCox')
-x_trans <- predict(x_bc,train |> dplyr::select(-c(Brand.Code,X,PH)))
+x_bc <- preProcess(train |> dplyr::select(-c(Brand.Code,PH)), method='BoxCox')
+x_trans <- predict(x_bc,train |> dplyr::select(-c(Brand.Code,PH)))
 fh_x_trans <- x_trans[,1:16]
 sh_x_trans <- x_trans[,17:31]
 
@@ -248,7 +264,7 @@ class(train$PH)
 
 ```{r, warning=FALSE}
 set.seed(21)
-x_Train <- as.matrix(as.data.frame(train |> dplyr::select(-c(PH,X,Brand.Code))))
+x_Train <- as.matrix(as.data.frame(train |> dplyr::select(-c(PH,Brand.Code))))
 y_Train <- train$PH
 train_lasso <- train(x=x_Train, y=y_Train,
                  method='lasso',
