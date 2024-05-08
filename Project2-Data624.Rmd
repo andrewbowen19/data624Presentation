@@ -17,6 +17,7 @@ library(MASS)
 library(naniar)
 library(car)
 library(elasticnet)
+library(kableExtra)
 ```
 
 ## Introduction
@@ -91,6 +92,18 @@ naniar::gg_miss_fct(training,fct=Brand.Code) + labs(title='Missing Values by Bra
 
 Not that surprisingly the most common brand with missing values are the records with missing brand codes as well; however, the concentration isn't strong enough to considering excluding all related records where brand code is missing.
 
+### Missing Values
+
+```{r missing-values, echo=FALSE}
+missing_data <-
+  training %>%
+  summarise(across(everything(), ~ sum(is.na(.x))))
+
+kbl(missing_data) |>
+    kable_classic(full_width = F, html_font = "Cambria") %>%
+  kable_styling(latex_options = "HOLD_position")
+```
+
 ## Imputation
 Our dataset is missing values, so we'll have to impute using the `mice` library in R. For our purposes, we'll use [predictive mean matching as our imputation method](https://stefvanbuuren.name/fimd/sec-pmm.html), since we may or may not need to transform our target variable this is a good method as it's robust to transformations of our output variable $Y$.
 ```{r message=FALSE, warning=FALSE}
@@ -106,9 +119,21 @@ train <- complete(imputed)
 head(train)
 ```
 
+
+
 ```{r}
 hist_train <- train |> dplyr::select(-c(Brand.Code))
 dim(hist_train)
+```
+
+```{r missing-values-after, echo=FALSE}
+missing_data <-
+  train %>%
+  summarise(across(everything(), ~ sum(is.na(.x))))
+
+kbl(missing_data) |>
+    kable_classic(full_width = F, html_font = "Cambria") %>%
+  kable_styling(latex_options = "HOLD_position")
 ```
 
 ```{r}
