@@ -32,7 +32,7 @@ First, we'll read in our training and testing datasets. We've converted them via
 ```{r read-in}
 # Read in training and testing datasets
 training <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/train.csv")
-test <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/test.csv")
+eval <- read.csv("https://raw.githubusercontent.com/andrewbowen19/data624Presentation/main/data/test.csv")
 ```
 
 
@@ -54,8 +54,8 @@ training <-
   dplyr::select(-X) |>
   relocate(PH)
 
-test <-
-  test |>
+eval <-
+  eval |>
   dplyr::select(-X) |>
   relocate(PH)
 ```
@@ -75,7 +75,7 @@ Most of the data is concentrated around a 8.5 pH level which are all bases above
 ```{r wrangling}
 # Convert Brand.Code to a factor as it's categorical
 training$Brand.Code <- as.factor(training$Brand.Code)
-test$Brand.Code <- as.factor(test$Brand.Code)
+eval$Brand.Code <- as.factor(eval$Brand.Code)
 ```
 
 ```{r}
@@ -418,19 +418,19 @@ plot(xgBoostModel)
 
 We'll need to impute our test data in order to not feed any `NaN` values into our models. We'll use the predictive mean matching method that we used above to impute our test values.
 ```{r impute-test-data}
-testImputed <- mice(test, method="pmm", seed=1234, printFlag = FALSE)
+evalImputed <- mice(eval, method="pmm", seed=1234, printFlag = FALSE)
 
-test <- complete(testImputed)# %>% select(-c("PH"))#, "Brand.Code"))
+eval <- complete(evalImputed)# %>% select(-c("PH"))#, "Brand.Code"))
 ```
 
 
 Now we can use the four models we've trained 
 ```{r predict}
 # Predict using all trained models
-predictionsLinear <- predict(mlmModel, test)
-predictionsRandomForest <- predict(rfModel, test)
-predictionsNN <- predict(nnModel, test %>% dplyr::select(-c(PH)))
-predictionsXGBoost <- predict(xgBoostModel, test)
+predictionsLinear <- predict(mlmModel, eval)
+predictionsRandomForest <- predict(rfModel, eval)
+predictionsNN <- predict(nnModel, eval %>% dplyr::select(-c(PH)))
+predictionsXGBoost <- predict(xgBoostModel, eval)
 ```
 
 
