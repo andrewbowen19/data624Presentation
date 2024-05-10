@@ -440,13 +440,78 @@ plot(xgBoostModel)
 
 ## Model Evalutation
 
-Now we can use the four models we've trained and test our holdset on it
+Now we can use the four models we've trained and test our holdset on it. This will allow us to evaluate the predictors and its effectiveness
 ```{r predict}
 # Predict using all trained models
 predictionsLinear <- predict(mlmModel, test_x)
 predictionsRandomForest <- predict(rfModel, test_x)
 predictionsNN <- predict(nnModel, test_x )
 predictionsXGBoost <- predict(xgBoostModel, test_x)
+```
+
+The model with the best prediction performance is the Random Forest model with an $R^2 = 0.6698$ and the lowest $RMSE = 0.1020$ 
+
+```{r metrics}
+mlm_perf <- as_tibble(as.list(postResample(predictionsLinear, test_y))) %>%
+  mutate(Model = "Linear Reg") |>
+  relocate(Model)
+rf_perf <- as_tibble(as.list(postResample(predictionsRandomForest, test_y)))%>%
+  mutate(Model = "Random Forest") |>
+  relocate(Model)
+nn_perf <- as_tibble(as.list(postResample(predictionsNN, test_y)))%>%
+  mutate(Model = "Neural Net")|>
+  relocate(Model)
+xg_perf <- as_tibble(as.list(postResample(predictionsXGBoost, test_y)))%>%
+  mutate(Model = "XGBoost")|>
+  relocate(Model)
+
+models_performance <- rbind(mlm_perf, rf_perf, nn_perf, xg_perf)
+
+kbl(models_performance, digits = 4, caption = "Model Performance") |>
+  kable_classic(full_width = F, html_font = "Cambria") |>
+  kable_styling(latex_options = "HOLD_position")
+```
+
+#### Variable Importance
+
+We can see that in 3 out of our 4 main models, within the top 10 predictors, we have `Mnf.Flow` as a key important variable in our models. Interestingly enough, our Neural Net model shows `filler.speed` as the most important variable, however, it does not fall into any of our other models top 10 at all. 
+
+```{r var-imp}
+var_imp_table <- function(model_name, tbl_name) {
+  
+    if (tbl_name != "Neural Net" && tbl_name != "XGBoost") {
+      var_imp <- varImp(model_name, scale = FALSE) 
+      
+      var_imp <- var_imp %>%
+        arrange(desc(Overall)) %>%
+          mutate(Rank = 1:nrow(var_imp))  %>%
+        head(., 10) %>%
+        arrange(row.names(.))
+        } 
+    else {
+      var_imp <- varImp(model_name, scale = FALSE)
+      var_imp <- var_imp$importance 
+      
+      var_imp <- var_imp %>%
+        arrange(desc(Overall)) %>%
+          mutate(Rank = 1:nrow(var_imp)) %>%
+        head(., 10) %>%
+        arrange(row.names(.))
+      }
+  
+  kbl(var_imp,
+    caption = "Variable Importance",
+    digits=4) |>
+  kable_classic(full_width = F, html_font = "Cambria") |>
+  footnote(general_title = "",
+           symbol = c(tbl_name)) |>
+    row_spec(which(var_imp$Rank==1), bold = T, color = "white", background = "red")
+}
+
+var_imp_table(mlmModel, "Linear Regression")
+var_imp_table(rfModel, "Random Forest")
+var_imp_table(nnModel, "Neural Net")
+var_imp_table(xgBoostModel, "XGBoost")
 ```
 
 
