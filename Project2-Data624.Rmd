@@ -525,7 +525,7 @@ evalImputed <- mice(eval, method="pmm", seed=1234, printFlag = FALSE)
 eval <- complete(evalImputed)# %>% select(-c("PH"))#, "Brand.Code"))
 ```
 
-Now we can use the four models we've trained 
+Now we can use the four models we've trained as options for predictions. 
 ```{r predict}
 # Predict using all trained models
 predictionsLinear <- predict(mlmModel, eval)
@@ -542,3 +542,4 @@ predictions <- as.data.frame(cbind(linear = predictionsLinear,xgBoost = predicti
 # write_csv(predictions, "/Users/andrewbowen/CUNY/data624Presentation/data/project2-predictions.csv")
 ```
 
+However, given our results our best model would be to use a Random Forest with a focus on `Mnf.Flow` in our process as a major contributor and predictor for `PH`.
